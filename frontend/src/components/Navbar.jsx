@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import {
   FaSearch,
   FaHeart,
@@ -21,14 +22,10 @@ const Navbar = () => {
         {/* Navigation Links */}
         <ul className="hidden md:flex items-center gap-8 font-medium">
           <li>
-            <a href="/" className="hover:text-gray-300 transition">
-              Home
-            </a>
+             <Link to="/">Home</Link>
           </li>
           <li>
-            <a href="/shop" className="hover:text-gray-300 transition">
-              Shop
-            </a>
+            <Link to="/shop">Shop</Link>
           </li>
           <li>
             <a href="/about" className="hover:text-gray-300 transition">
@@ -36,9 +33,7 @@ const Navbar = () => {
             </a>
           </li>
           <li>
-            <a href="/contact" className="hover:text-gray-300 transition">
-              Contact
-            </a>
+            <Link to="/cart">Cart</Link>
           </li>
         </ul>
  

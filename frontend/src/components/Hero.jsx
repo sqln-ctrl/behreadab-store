@@ -2,6 +2,7 @@ import React from "react";
 import ProductCard from "./ProductCard";
 import FeaturedWatches from "./FeaturedWatches";
 import Categories from "./Categories";
+import { Link } from "react-router-dom";
 
 const Hero = () => {
   return (
@@ -15,14 +16,14 @@ const Hero = () => {
               Timeless Elegance
             </h1>
 
-            <p className="mt-6 text-gray-300 text-lg">
+            <p className="mt-6  text-gray-300 text-lg">
               Discover premium watches crafted for style,
               precision, and performance.
             </p>
 
-            <button className="mt-8 bg-white text-black px-8 py-3 rounded-lg font-semibold hover:bg-gray-200">
+            <Link to="/shop" className="mt-6 inline-block bg-white text-black px-8 py-3 rounded-lg font-semibold hover:bg-gray-200">
               Shop Now
-            </button>
+            </Link>
           </div>
 
           <div className="mt-10 md:mt-0">
@@ -42,4 +43,4 @@ const Hero = () => {
   );
 };
 
-export default Hero;1
+export default Hero;
