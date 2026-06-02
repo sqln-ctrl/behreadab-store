@@ -1,11 +1,14 @@
-import "./index.css";
-
-function App (){
+function App() {
   return (
-      <div>
-        <h1>Zauq by Behr e Adab</h1>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-blue-500">
+      <h1 className="text-5xl font-bold text-white">
+        Tailwind is Working!
+      </h1>
+    </div>
   );
 }
 
 export default App;
+
+
+
