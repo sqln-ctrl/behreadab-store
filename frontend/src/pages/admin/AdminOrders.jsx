@@ -1,0 +1,214 @@
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FaTimes, FaTruck, FaClock, FaBox, FaCheckCircle, FaPrint } from "react-icons/fa";
+import { Link } from "react-router-dom";
+import { adminAPI } from "../../services/api";
+
+const STATUSES = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+const STATUS_STYLES = {
+  Pending:    { bg: "#fef3c7", text: "#92400e" },
+  Processing: { bg: "#dbeafe", text: "#1e40af" },
+  Shipped:    { bg: "#ede9fe", text: "#5b21b6" },
+  Delivered:  { bg: "#dcfce7", text: "#166534" },
+  Cancelled:  { bg: "#fee2e2", text: "#991b1b" },
+};
+
+const AdminOrders = () => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [newStatus, setNewStatus] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [updating, setUpdating] = useState(false);
+
+  const fetchOrders = () => {
+    setLoading(true);
+    adminAPI.getAllOrders({ status: statusFilter, limit: 50 })
+      .then(({ data }) => setOrders(data.orders))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchOrders(); }, [statusFilter]);
+
+  const openOrder = (order) => {
+    setSelectedOrder(order);
+    setNewStatus(order.status);
+    setTrackingNumber(order.tracking_number || "");
+  };
+
+  const handleUpdateStatus = async () => {
+    setUpdating(true);
+    try {
+      await adminAPI.updateOrderStatus(selectedOrder.id, { status: newStatus, tracking_number: trackingNumber });
+      setSelectedOrder(null);
+      fetchOrders();
+    } catch (err) { console.error(err); }
+    finally { setUpdating(false); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-black text-gray-900" style={{ fontFamily: "'Georgia', serif" }}>Orders</h1>
+        <p className="text-gray-400 text-sm mt-1">{orders.length} orders</p>
+      </div>
+
+      {/* Status filter */}
+      <div className="flex gap-2 flex-wrap">
+        {["", ...STATUSES].map((s) => (
+          <motion.button key={s} onClick={() => setStatusFilter(s)} whileTap={{ scale: 0.97 }}
+            className="px-4 py-2 rounded-xl text-sm font-medium border transition"
+            style={{ background: statusFilter === s ? "#d4af37" : "white", borderColor: statusFilter === s ? "#d4af37" : "#e5e7eb", color: statusFilter === s ? "#000" : "#6b7280" }}>
+            {s || "All"}
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {["Order ID", "Customer", "Items", "Total", "Payment", "Status", "Date", "Actions"].map((h) => (
+                  <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loading && <tr><td colSpan={8} className="text-center py-12"><div className="w-8 h-8 rounded-full border-2 border-t-yellow-400 animate-spin mx-auto" /></td></tr>}
+              {!loading && orders.length === 0 && <tr><td colSpan={8} className="text-center py-12 text-gray-400">No orders found</td></tr>}
+              {orders.map((order) => {
+                const style = STATUS_STYLES[order.status] || { bg: "#f3f4f6", text: "#374151" };
+                return (
+                  <tr key={order.id} className="hover:bg-gray-50 transition">
+                    <td className="px-5 py-4 font-mono text-xs text-gray-500">#{order.id.slice(-8).toUpperCase()}</td>
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-gray-800">{order.users?.name}</p>
+                      <p className="text-xs text-gray-400">{order.users?.email}</p>
+                    </td>
+                    <td className="px-5 py-4 text-gray-500">{order.order_items?.length} item(s)</td>
+                    <td className="px-5 py-4 font-black" style={{ color: "#d4af37" }}>PKR {Number(order.total_amount).toLocaleString()}</td>
+                    <td className="px-5 py-4">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${order.is_paid ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-600"}`}>
+                        {order.is_paid ? "Paid" : order.payment_method?.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold"
+                        style={{ background: style.bg, color: style.text }}>{order.status}</span>
+                    </td>
+                    <td className="px-5 py-4 text-gray-400 text-xs">{new Date(order.created_at).toLocaleDateString()}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <motion.button onClick={() => openOrder(order)} whileTap={{ scale: 0.97 }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 hover:border-yellow-400 transition">
+                          Manage
+                        </motion.button>
+                        <Link to={`/admin/orders/${order.id}/receipt`}>
+                          <motion.button whileTap={{ scale: 0.97 }}
+                            className="w-8 h-8 rounded-lg bg-gray-50 text-gray-500 flex items-center justify-center hover:bg-yellow-50 hover:text-yellow-600 transition"
+                            title="Print Receipt">
+                            <FaPrint className="text-xs" />
+                          </motion.button>
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Order detail modal */}
+      <AnimatePresence>
+        {selectedOrder && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setSelectedOrder(null)} className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.94, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.94 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-50 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
+                <h2 className="font-black text-lg">Order #{selectedOrder.id.slice(-8).toUpperCase()}</h2>
+                <div className="flex items-center gap-3">
+                  <Link to={`/admin/orders/${selectedOrder.id}/receipt`} target="_blank">
+                    <button className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-black transition">
+                      <FaPrint className="text-xs" /> Print
+                    </button>
+                  </Link>
+                  <button onClick={() => setSelectedOrder(null)}><FaTimes className="text-gray-400" /></button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* Customer */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Customer</p>
+                  <p className="font-semibold text-gray-800">{selectedOrder.users?.name}</p>
+                  <p className="text-sm text-gray-400">{selectedOrder.users?.email}</p>
+                </div>
+
+                {/* Shipping address */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Ship To</p>
+                  {selectedOrder.shipping_address && (
+                    <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-700 space-y-0.5">
+                      <p className="font-bold">{selectedOrder.shipping_address.full_name}</p>
+                      <p>{selectedOrder.shipping_address.phone}</p>
+                      <p>{selectedOrder.shipping_address.street}</p>
+                      <p>{selectedOrder.shipping_address.city}, {selectedOrder.shipping_address.province}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Items */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Items</p>
+                  <div className="space-y-2">
+                    {selectedOrder.order_items?.map((item) => (
+                      <div key={item.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover" />
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm">{item.name}</p>
+                          <p className="text-xs text-gray-400">Qty: {item.qty} · PKR {Number(item.price).toLocaleString()} each</p>
+                        </div>
+                        <p className="font-black text-sm" style={{ color: "#d4af37" }}>PKR {Number(item.price * item.qty).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t flex justify-between font-black">
+                    <span>Total</span>
+                    <span style={{ color: "#d4af37" }}>PKR {Number(selectedOrder.total_amount).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Update status */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Update Status</p>
+                  <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}
+                    className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-yellow-400 bg-white mb-3">
+                    {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                  <input value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)}
+                    placeholder="Tracking number (optional)"
+                    className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-yellow-400 mb-3" />
+                  <motion.button onClick={handleUpdateStatus} disabled={updating} whileTap={{ scale: 0.97 }}
+                    className="w-full py-3 rounded-xl font-bold text-black text-sm uppercase tracking-widest disabled:opacity-60"
+                    style={{ background: "#d4af37" }}>
+                    {updating ? "Updating..." : "Update Order"}
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default AdminOrders;

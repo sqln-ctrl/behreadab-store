@@ -1,0 +1,12 @@
+import express from 'express';
+import { getWishlist, toggleWishlist, getAddresses, addAddress, updateAddress, deleteAddress } from '../controllers/userController.js';
+import { protect } from '../middleware/auth.js';
+const router = express.Router();
+router.use(protect);
+router.get('/wishlist', getWishlist);
+router.post('/wishlist/toggle', toggleWishlist);
+router.get('/addresses', getAddresses);
+router.post('/addresses', addAddress);
+router.put('/addresses/:id', updateAddress);
+router.delete('/addresses/:id', deleteAddress);
+export default router;

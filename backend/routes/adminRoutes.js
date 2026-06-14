@@ -1,0 +1,12 @@
+import express from 'express';
+import { getDashboardStats, getHeroConfig, updateHeroConfig, getAllUsers, updateUser, getUserById } from '../controllers/adminController.js';
+import { protect, adminOnly } from '../middleware/auth.js';
+const router = express.Router();
+router.get('/hero', getHeroConfig);
+router.use(protect, adminOnly);
+router.get('/stats', getDashboardStats);
+router.put('/hero', updateHeroConfig);
+router.get('/users', getAllUsers);
+router.get('/users/:id', getUserById);
+router.put('/users/:id', updateUser);
+export default router;
