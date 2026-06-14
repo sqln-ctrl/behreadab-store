@@ -1,74 +1,99 @@
-import asyncHandler from "express-async-handler";
-import Order from "../models/Order.js";
-import Product from "../models/Product.js";
-import User from "../models/User.js";
+import asyncHandler from 'express-async-handler';
+import supabase from '../config/supabase.js';
 
 // @GET /api/admin/stats
 export const getDashboardStats = asyncHandler(async (req, res) => {
-  const [totalOrders, totalProducts, totalUsers, revenueData] = await Promise.all([
-    Order.countDocuments(),
-    Product.countDocuments({ isActive: true }),
-    User.countDocuments({ role: "user" }),
-    Order.aggregate([
-      { $match: { isPaid: true } },
-      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
-    ]),
+  const [ordersRes, productsRes, usersRes, revenueRes, lowStockRes, recentOrdersRes, statusRes] = await Promise.all([
+    supabase.from('orders').select('id', { count: 'exact', head: true }),
+    supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'user'),
+    supabase.from('ledger_entries').select('amount').eq('credit_account', 'revenue'),
+    supabase.from('inventory').select('*, products(name, image)').lte('stock_qty', supabase.raw('reorder_point')),
+    supabase.from('orders').select('*, users(name, email)').order('created_at', { ascending: false }).limit(8),
+    supabase.from('orders').select('status'),
   ]);
 
-  const totalRevenue = revenueData[0]?.total || 0;
+  const totalRevenue = revenueRes.data?.reduce((acc, r) => acc + Number(r.amount), 0) || 0;
 
-  // Last 7 days orders
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const recentOrders = await Order.find({ createdAt: { $gte: sevenDaysAgo } })
-    .populate("user", "name email")
-    .sort("-createdAt")
-    .limit(10);
-
-  // Orders by status
-  const statusCounts = await Order.aggregate([
-    { $group: { _id: "$status", count: { $sum: 1 } } },
-  ]);
-
-  // Top products
-  const topProducts = await Order.aggregate([
-    { $unwind: "$items" },
-    { $group: { _id: "$items.name", totalSold: { $sum: "$items.qty" }, revenue: { $sum: { $multiply: ["$items.price", "$items.qty"] } } } },
-    { $sort: { totalSold: -1 } },
-    { $limit: 5 },
-  ]);
-
-  res.json({ totalOrders, totalProducts, totalUsers, totalRevenue, recentOrders, statusCounts, topProducts });
-});
-
-// @GET/PUT /api/admin/hero  — hero section settings
-// Store hero config directly in a simple JSON (no extra model needed)
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const heroPath = path.join(__dirname, "../data/hero.json");
-
-export const getHeroConfig = asyncHandler(async (req, res) => {
-  if (!fs.existsSync(heroPath)) {
-    return res.json({
-      headline: "Timeless",
-      subheadline: "Elegance.",
-      subtext: "Premium watches crafted for style, precision, and performance.",
-      ctaText: "Shop Now",
-      discountText: "",
-      image: "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=500&q=85",
-      badge: "New Arrival",
-      badgeSub: "Swiss Collection 2025",
-      fromPrice: "199",
-    });
+  // Status breakdown
+  const statusCounts = {};
+  for (const row of (statusRes.data || [])) {
+    statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
   }
-  const config = JSON.parse(fs.readFileSync(heroPath, "utf-8"));
-  res.json(config);
+
+  res.json({
+    totalOrders:   ordersRes.count   || 0,
+    totalProducts: productsRes.count || 0,
+    totalUsers:    usersRes.count    || 0,
+    totalRevenue,
+    lowStock:      lowStockRes.data  || [],
+    recentOrders:  recentOrdersRes.data || [],
+    statusCounts:  Object.entries(statusCounts).map(([_id, count]) => ({ _id, count })),
+  });
 });
 
+// @GET /api/admin/hero
+export const getHeroConfig = asyncHandler(async (req, res) => {
+  const { data } = await supabase.from('hero_config').select('*').limit(1).single();
+  res.json(data);
+});
+
+// @PUT /api/admin/hero  [admin]
 export const updateHeroConfig = asyncHandler(async (req, res) => {
-  const dir = path.dirname(heroPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(heroPath, JSON.stringify(req.body, null, 2));
-  res.json(req.body);
+  const { data: existing } = await supabase.from('hero_config').select('id').limit(1).single();
+
+  const { data, error } = await supabase
+    .from('hero_config')
+    .update(req.body)
+    .eq('id', existing.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
+});
+
+// @GET /api/admin/users  [admin]
+export const getAllUsers = asyncHandler(async (req, res) => {
+  const { search, page = 1, limit = 20 } = req.query;
+
+  let query = supabase
+    .from('users')
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false });
+
+  if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+
+  const from = (Number(page) - 1) * Number(limit);
+  query = query.range(from, from + Number(limit) - 1);
+
+  const { data, error, count } = await query;
+  if (error) return res.status(400).json({ message: error.message });
+  res.json({ users: data, total: count });
+});
+
+// @PUT /api/admin/users/:id  [admin]
+export const updateUser = asyncHandler(async (req, res) => {
+  const { is_active, role } = req.body;
+  const updates = {};
+  if (is_active !== undefined) updates.is_active = is_active;
+  if (role !== undefined)      updates.role       = role;
+
+  const { data, error } = await supabase
+    .from('users').update(updates).eq('id', req.params.id).select().single();
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
+});
+
+// @GET /api/admin/users/:id  [admin]
+export const getUserById = asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*, orders(id, total_amount, status, created_at), addresses(*)')
+    .eq('id', req.params.id)
+    .single();
+
+  if (error || !data) return res.status(404).json({ message: 'User not found' });
+  res.json(data);
 });

@@ -1,82 +1,184 @@
-import asyncHandler from "express-async-handler";
-import Order from "../models/Order.js";
-import Product from "../models/Product.js";
+import asyncHandler from 'express-async-handler';
+import supabase from '../config/supabase.js';
 
 // @POST /api/orders
 export const createOrder = asyncHandler(async (req, res) => {
-  const { items, shippingAddress, paymentMethod, notes } = req.body;
+  const { items, shippingAddress, paymentMethod = 'cod', notes = '' } = req.body;
+  if (!items?.length) return res.status(400).json({ message: 'No items in order' });
 
-  if (!items?.length) return res.status(400).json({ message: "No items in order" });
-
-  // Verify products exist and calculate totals from DB (never trust frontend prices)
+  // Verify each product and build verified items
   let itemsTotal = 0;
   const verifiedItems = [];
 
   for (const item of items) {
-    const product = await Product.findById(item.product);
-    if (!product) return res.status(404).json({ message: `Product ${item.product} not found` });
-    if (product.stock < item.qty) return res.status(400).json({ message: `${product.name} is out of stock` });
+    const { data: product } = await supabase
+      .from('products')
+      .select('id, name, image, price, cost_price, inventory(stock_qty, reserved_qty)')
+      .eq('id', item.product_id)
+      .eq('is_active', true)
+      .single();
+
+    if (!product) return res.status(404).json({ message: `Product not found` });
+
+    const available = (product.inventory?.stock_qty || 0) - (product.inventory?.reserved_qty || 0);
+    if (available < item.qty)
+      return res.status(400).json({ message: `${product.name} has only ${available} units available` });
 
     verifiedItems.push({
-      product: product._id,
-      name: product.name,
-      image: product.image,
-      price: product.price,
-      qty: item.qty,
+      product_id: product.id,
+      name:       product.name,
+      image:      product.image,
+      price:      product.price,
+      cost_price: product.cost_price,
+      qty:        item.qty,
     });
     itemsTotal += product.price * item.qty;
-
-    // Reduce stock
-    product.stock -= item.qty;
-    await product.save();
   }
 
-  const shippingCost = itemsTotal >= 200 ? 0 : 15;
-  const totalAmount = itemsTotal + shippingCost;
+  const shippingCost = itemsTotal >= 5000 ? 0 : 500; // Free shipping over PKR 5000
+  const totalAmount  = itemsTotal + shippingCost;
 
-  const order = await Order.create({
-    user: req.user._id,
-    items: verifiedItems,
-    shippingAddress,
-    paymentMethod: paymentMethod || "cod",
-    itemsTotal,
-    shippingCost,
-    totalAmount,
-    notes,
+  // Create order
+  const { data: order, error: orderError } = await supabase
+    .from('orders')
+    .insert({
+      user_id: req.user.id,
+      items_total:      itemsTotal,
+      shipping_cost:    shippingCost,
+      total_amount:     totalAmount,
+      payment_method:   paymentMethod,
+      shipping_address: shippingAddress,
+      notes,
+    })
+    .select()
+    .single();
+
+  if (orderError) return res.status(400).json({ message: orderError.message });
+
+  // Insert order items
+  await supabase.from('order_items').insert(
+    verifiedItems.map((i) => ({ ...i, order_id: order.id }))
+  );
+
+  // Reduce inventory + log transactions
+  for (const item of verifiedItems) {
+    await supabase.from('inventory_transactions').insert({
+      product_id: item.product_id,
+      type:       'sale',
+      qty_change: -item.qty,
+      notes:      `Order ${order.id.slice(-8).toUpperCase()}`,
+    });
+  }
+
+  // Create payment record
+  await supabase.from('payments').insert({
+    order_id: order.id,
+    provider: paymentMethod,
+    amount:   totalAmount,
+    currency: 'PKR',
+    status:   paymentMethod === 'cod' ? 'pending' : 'pending',
   });
+
+  // Double-entry ledger entries
+  // 1. Revenue entry: debit accounts_receivable, credit revenue
+  await supabase.from('ledger_entries').insert({
+    order_id:       order.id,
+    type:           'sale',
+    debit_account:  'accounts_receivable',
+    credit_account: 'revenue',
+    amount:         itemsTotal,
+    currency:       'PKR',
+    description:    `Sale — Order #${order.id.slice(-8).toUpperCase()}`,
+  });
+
+  // 2. COGS entry: debit cogs, credit inventory_asset
+  const totalCogs = verifiedItems.reduce((acc, i) => acc + i.cost_price * i.qty, 0);
+  if (totalCogs > 0) {
+    await supabase.from('ledger_entries').insert({
+      order_id:       order.id,
+      type:           'cogs',
+      debit_account:  'cogs',
+      credit_account: 'inventory_asset',
+      amount:         totalCogs,
+      currency:       'PKR',
+      description:    `Cost of goods — Order #${order.id.slice(-8).toUpperCase()}`,
+    });
+  }
+
+  // 3. Shipping entry
+  if (shippingCost > 0) {
+    await supabase.from('ledger_entries').insert({
+      order_id:       order.id,
+      type:           'shipping',
+      debit_account:  'accounts_receivable',
+      credit_account: 'shipping_income',
+      amount:         shippingCost,
+      currency:       'PKR',
+      description:    `Shipping — Order #${order.id.slice(-8).toUpperCase()}`,
+    });
+  }
 
   res.status(201).json(order);
 });
 
 // @GET /api/orders/my
 export const getMyOrders = asyncHandler(async (req, res) => {
-  const orders = await Order.find({ user: req.user._id }).sort("-createdAt");
-  res.json(orders);
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, order_items(*)')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
 });
 
 // @GET /api/orders/:id
 export const getOrderById = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id).populate("user", "name email");
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*, order_items(*), payments(*), users(name, email)')
+    .eq('id', req.params.id)
+    .single();
 
-  // Only owner or admin can view
-  if (order.user._id.toString() !== req.user._id.toString() && req.user.role !== "admin")
-    return res.status(403).json({ message: "Not authorized" });
+  if (error || !data) return res.status(404).json({ message: 'Order not found' });
 
-  res.json(order);
+  if (data.user_id !== req.user.id && req.user.role !== 'admin')
+    return res.status(403).json({ message: 'Not authorized' });
+
+  res.json(data);
 });
 
 // @PUT /api/orders/:id/pay
 export const markAsPaid = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id);
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  const { provider_ref } = req.body;
 
-  order.isPaid = true;
-  order.paidAt = Date.now();
-  order.paymentResult = req.body;
-  order.status = "Processing";
-  const updated = await order.save();
-  res.json(updated);
+  const { data: order } = await supabase
+    .from('orders').select('*').eq('id', req.params.id).single();
+  if (!order) return res.status(404).json({ message: 'Order not found' });
+
+  await supabase.from('orders').update({
+    is_paid: true,
+    paid_at: new Date().toISOString(),
+    status:  'Processing',
+  }).eq('id', req.params.id);
+
+  await supabase.from('payments').update({
+    status: 'completed', paid_at: new Date().toISOString(), provider_ref: provider_ref || '',
+  }).eq('order_id', req.params.id);
+
+  // Ledger: cash received — debit cash, credit accounts_receivable
+  await supabase.from('ledger_entries').insert({
+    order_id:       order.id,
+    type:           'sale',
+    debit_account:  'cash',
+    credit_account: 'accounts_receivable',
+    amount:         order.total_amount,
+    currency:       'PKR',
+    description:    `Payment received — Order #${order.id.slice(-8).toUpperCase()}`,
+  });
+
+  res.json({ message: 'Order marked as paid' });
 });
 
 // ── Admin routes ──
@@ -84,28 +186,60 @@ export const markAsPaid = asyncHandler(async (req, res) => {
 // @GET /api/orders  [admin]
 export const getAllOrders = asyncHandler(async (req, res) => {
   const { status, page = 1, limit = 20 } = req.query;
-  const query = status ? { status } : {};
 
-  const total = await Order.countDocuments(query);
-  const orders = await Order.find(query)
-    .populate("user", "name email")
-    .sort("-createdAt")
-    .skip((Number(page) - 1) * Number(limit))
-    .limit(Number(limit));
+  let query = supabase
+    .from('orders')
+    .select('*, users(name, email), order_items(*)', { count: 'exact' })
+    .order('created_at', { ascending: false });
 
-  res.json({ orders, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+  if (status) query = query.eq('status', status);
+
+  const from = (Number(page) - 1) * Number(limit);
+  query = query.range(from, from + Number(limit) - 1);
+
+  const { data, error, count } = await query;
+  if (error) return res.status(400).json({ message: error.message });
+
+  res.json({ orders: data, total: count, page: Number(page), pages: Math.ceil(count / Number(limit)) });
 });
 
 // @PUT /api/orders/:id/status  [admin]
 export const updateOrderStatus = asyncHandler(async (req, res) => {
-  const { status, trackingNumber } = req.body;
-  const order = await Order.findById(req.params.id);
-  if (!order) return res.status(404).json({ message: "Order not found" });
+  const { status, tracking_number } = req.body;
 
-  order.status = status;
-  if (trackingNumber) order.trackingNumber = trackingNumber;
-  if (status === "Delivered") order.deliveredAt = Date.now();
+  const updates = { status };
+  if (tracking_number) updates.tracking_number = tracking_number;
+  if (status === 'Delivered') updates.delivered_at = new Date().toISOString();
 
-  const updated = await order.save();
-  res.json(updated);
+  // If cancelled — reverse inventory
+  if (status === 'Cancelled') {
+    const { data: items } = await supabase
+      .from('order_items').select('*').eq('order_id', req.params.id);
+
+    for (const item of items) {
+      await supabase.from('inventory_transactions').insert({
+        product_id: item.product_id,
+        type:       'return',
+        qty_change: item.qty,
+        notes:      `Cancelled order ${req.params.id.slice(-8).toUpperCase()}`,
+      });
+    }
+
+    // Ledger reversal
+    await supabase.from('ledger_entries').insert({
+      order_id:       req.params.id,
+      type:           'refund',
+      debit_account:  'revenue',
+      credit_account: 'accounts_receivable',
+      amount:         (await supabase.from('orders').select('total_amount').eq('id', req.params.id).single()).data.total_amount,
+      currency:       'PKR',
+      description:    `Cancellation — Order #${req.params.id.slice(-8).toUpperCase()}`,
+    });
+  }
+
+  const { data, error } = await supabase
+    .from('orders').update(updates).eq('id', req.params.id).select().single();
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
 });

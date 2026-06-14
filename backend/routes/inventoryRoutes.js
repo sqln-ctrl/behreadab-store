@@ -1,0 +1,17 @@
+import express from 'express';
+import { getInventory, adjustStock, getTransactions, getSuppliers, createSupplier, updateSupplier, deleteSupplier, getPurchaseOrders, createPurchaseOrder, receivePurchaseOrder, updatePurchaseOrder } from '../controllers/inventoryController.js';
+import { protect, adminOnly } from '../middleware/auth.js';
+const router = express.Router();
+router.use(protect, adminOnly);
+router.get('/stock', getInventory);
+router.post('/adjust', adjustStock);
+router.get('/transactions', getTransactions);
+router.get('/suppliers', getSuppliers);
+router.post('/suppliers', createSupplier);
+router.put('/suppliers/:id', updateSupplier);
+router.delete('/suppliers/:id', deleteSupplier);
+router.get('/purchase-orders', getPurchaseOrders);
+router.post('/purchase-orders', createPurchaseOrder);
+router.put('/purchase-orders/:id', updatePurchaseOrder);
+router.put('/purchase-orders/:id/receive', receivePurchaseOrder);
+export default router;

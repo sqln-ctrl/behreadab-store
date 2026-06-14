@@ -1,28 +1,17 @@
 const errorHandler = (err, req, res, next) => {
-  const statusCode = err.statusCode || res.statusCode === 200 ? 500 : res.statusCode;
+  console.error(err);
+  const status = err.status || 500;
 
-  // Mongoose duplicate key
-  if (err.code === 11000) {
-    return res.status(400).json({
-      message: `${Object.keys(err.keyValue)[0]} already exists`,
-    });
+  if (err.code === '23505') {
+    return res.status(400).json({ message: 'Record already exists' });
+  }
+  if (err.code === '23503') {
+    return res.status(400).json({ message: 'Referenced record does not exist' });
   }
 
-  // Mongoose validation error
-  if (err.name === "ValidationError") {
-    return res.status(400).json({
-      message: Object.values(err.errors).map((e) => e.message).join(", "),
-    });
-  }
-
-  // JWT error
-  if (err.name === "JsonWebTokenError") {
-    return res.status(401).json({ message: "Invalid token" });
-  }
-
-  res.status(statusCode).json({
-    message: err.message || "Server error",
-    stack: process.env.NODE_ENV === "production" ? null : err.stack,
+  res.status(status).json({
+    message: err.message || 'Server error',
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
 };
 

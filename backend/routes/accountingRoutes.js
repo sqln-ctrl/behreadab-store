@@ -1,0 +1,11 @@
+import express from 'express';
+import { getSummary, getPnL, getLedger, getBalanceSheet, recordExpense } from '../controllers/accountingController.js';
+import { protect, adminOnly } from '../middleware/auth.js';
+const router = express.Router();
+router.use(protect, adminOnly);
+router.get('/summary', getSummary);
+router.get('/pnl', getPnL);
+router.get('/ledger', getLedger);
+router.get('/balance-sheet', getBalanceSheet);
+router.post('/expense', recordExpense);
+export default router;

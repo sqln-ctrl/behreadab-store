@@ -1,108 +1,170 @@
-import asyncHandler from "express-async-handler";
-import Product from "../models/Product.js";
-import { cloudinary } from "../config/cloudinary.js";
+import asyncHandler from 'express-async-handler';
+import supabase from '../config/supabase.js';
+import { cloudinary } from '../config/cloudinary.js';
 
 // @GET /api/products
 export const getProducts = asyncHandler(async (req, res) => {
   const { category, search, sort, minPrice, maxPrice, page = 1, limit = 12, featured } = req.query;
 
-  const query = { isActive: true };
+  let query = supabase
+    .from('products')
+    .select('*, inventory(stock_qty, reserved_qty, reorder_point)', { count: 'exact' })
+    .eq('is_active', true);
 
-  if (category && category !== "All") query.category = category;
-  if (search) query.name = { $regex: search, $options: "i" };
-  if (minPrice || maxPrice) query.price = {};
-  if (minPrice) query.price.$gte = Number(minPrice);
-  if (maxPrice) query.price.$lte = Number(maxPrice);
-  if (featured === "true") query.isFeatured = true;
+  if (category && category !== 'All') query = query.eq('category', category);
+  if (featured === 'true') query = query.eq('is_featured', true);
+  if (search) query = query.ilike('name', `%${search}%`);
+  if (minPrice) query = query.gte('price', Number(minPrice));
+  if (maxPrice) query = query.lte('price', Number(maxPrice));
 
+  // Sorting
   const sortMap = {
-    "price-asc": { price: 1 },
-    "price-desc": { price: -1 },
-    rating: { rating: -1 },
-    newest: { createdAt: -1 },
+    'price-asc':  { column: 'price',      ascending: true },
+    'price-desc': { column: 'price',      ascending: false },
+    'rating':     { column: 'rating',     ascending: false },
+    'newest':     { column: 'created_at', ascending: false },
   };
-  const sortOption = sortMap[sort] || { createdAt: -1 };
+  const s = sortMap[sort] || { column: 'created_at', ascending: false };
+  query = query.order(s.column, { ascending: s.ascending });
 
-  const total = await Product.countDocuments(query);
-  const products = await Product.find(query)
-    .sort(sortOption)
-    .skip((Number(page) - 1) * Number(limit))
-    .limit(Number(limit));
+  // Pagination
+  const from = (Number(page) - 1) * Number(limit);
+  query = query.range(from, from + Number(limit) - 1);
 
-  res.json({ products, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
+  const { data, error, count } = await query;
+  if (error) return res.status(400).json({ message: error.message });
+
+  res.json({
+    products: data,
+    total: count,
+    page: Number(page),
+    pages: Math.ceil(count / Number(limit)),
+  });
 });
 
 // @GET /api/products/:id
 export const getProductById = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id).populate("reviews.user", "name avatar");
-  if (!product) return res.status(404).json({ message: "Product not found" });
-  res.json(product);
+  const { data, error } = await supabase
+    .from('products')
+    .select('*, inventory(*), reviews(*, users(name, avatar))')
+    .eq('id', req.params.id)
+    .single();
+
+  if (error || !data) return res.status(404).json({ message: 'Product not found' });
+  res.json(data);
 });
 
 // @POST /api/products  [admin]
 export const createProduct = asyncHandler(async (req, res) => {
-  const { name, description, price, category, badge, stock, isFeatured } = req.body;
+  const { name, description, price, cost_price, category, badge, stock_qty, reorder_point, reorder_qty, is_featured } = req.body;
 
   const images = req.files?.map((f) => f.path) || [];
-  const imagePublicIds = req.files?.map((f) => f.filename) || [];
 
-  const product = await Product.create({
-    name, description, price, category, badge, stock, isFeatured,
-    image: images[0] || "",
-    images,
-    imagePublicIds,
+  // Insert product
+  const { data: product, error } = await supabase
+    .from('products')
+    .insert({
+      name, description, price: Number(price),
+      cost_price: Number(cost_price || 0),
+      category, badge: badge || null,
+      image: images[0] || '',
+      images,
+      is_featured: is_featured === 'true',
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ message: error.message });
+
+  // Create inventory record
+  await supabase.from('inventory').insert({
+    product_id:    product.id,
+    stock_qty:     Number(stock_qty || 0),
+    reorder_point: Number(reorder_point || 5),
+    reorder_qty:   Number(reorder_qty || 20),
   });
+
+  // Log initial stock as restock transaction
+  if (Number(stock_qty) > 0) {
+    await supabase.from('inventory_transactions').insert({
+      product_id: product.id,
+      type:       'restock',
+      qty_change: Number(stock_qty),
+      notes:      'Initial stock on product creation',
+    });
+  }
+
   res.status(201).json(product);
 });
 
 // @PUT /api/products/:id  [admin]
 export const updateProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id);
-  if (!product) return res.status(404).json({ message: "Product not found" });
+  const { id } = req.params;
+  const { name, description, price, cost_price, category, badge, is_featured, is_active, reorder_point, reorder_qty } = req.body;
 
-  const fields = ["name", "description", "price", "category", "badge", "stock", "isFeatured", "isActive"];
-  fields.forEach((f) => { if (req.body[f] !== undefined) product[f] = req.body[f]; });
+  const updates = {};
+  if (name !== undefined)        updates.name = name;
+  if (description !== undefined) updates.description = description;
+  if (price !== undefined)       updates.price = Number(price);
+  if (cost_price !== undefined)  updates.cost_price = Number(cost_price);
+  if (category !== undefined)    updates.category = category;
+  if (badge !== undefined)       updates.badge = badge || null;
+  if (is_featured !== undefined) updates.is_featured = is_featured === 'true' || is_featured === true;
+  if (is_active !== undefined)   updates.is_active = is_active === 'true' || is_active === true;
 
-  // If new images uploaded, add to gallery
+  // New images uploaded
   if (req.files?.length) {
     const newImages = req.files.map((f) => f.path);
-    const newIds = req.files.map((f) => f.filename);
-    product.images = [...product.images, ...newImages];
-    product.imagePublicIds = [...product.imagePublicIds, ...newIds];
-    product.image = product.images[0];
+    const { data: existing } = await supabase.from('products').select('images').eq('id', id).single();
+    updates.images = [...(existing?.images || []), ...newImages];
+    updates.image  = updates.images[0];
   }
 
-  const updated = await product.save();
-  res.json(updated);
+  const { data, error } = await supabase
+    .from('products').update(updates).eq('id', id).select().single();
+
+  if (error) return res.status(400).json({ message: error.message });
+
+  // Update inventory settings
+  const invUpdates = {};
+  if (reorder_point !== undefined) invUpdates.reorder_point = Number(reorder_point);
+  if (reorder_qty !== undefined)   invUpdates.reorder_qty   = Number(reorder_qty);
+  if (Object.keys(invUpdates).length > 0) {
+    await supabase.from('inventory').update(invUpdates).eq('product_id', id);
+  }
+
+  res.json(data);
 });
 
 // @DELETE /api/products/:id  [admin]
 export const deleteProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id);
-  if (!product) return res.status(404).json({ message: "Product not found" });
+  const { id } = req.params;
 
-  // Delete images from Cloudinary
-  for (const publicId of product.imagePublicIds) {
-    await cloudinary.uploader.destroy(publicId);
-  }
+  // Get images to delete from Cloudinary
+  const { data: product } = await supabase.from('products').select('images').eq('id', id).single();
+  if (!product) return res.status(404).json({ message: 'Product not found' });
 
-  await product.deleteOne();
-  res.json({ message: "Product deleted" });
+  // Soft delete (keep for order history)
+  await supabase.from('products').update({ is_active: false }).eq('id', id);
+
+  res.json({ message: 'Product deactivated' });
 });
 
 // @POST /api/products/:id/reviews
 export const addReview = asyncHandler(async (req, res) => {
   const { rating, comment } = req.body;
-  const product = await Product.findById(req.params.id);
-  if (!product) return res.status(404).json({ message: "Product not found" });
+  const { id: product_id } = req.params;
 
-  const alreadyReviewed = product.reviews.find(
-    (r) => r.user.toString() === req.user._id.toString()
-  );
-  if (alreadyReviewed) return res.status(400).json({ message: "Already reviewed" });
+  const { data, error } = await supabase
+    .from('reviews')
+    .insert({ product_id, user_id: req.user.id, rating: Number(rating), comment })
+    .select()
+    .single();
 
-  product.reviews.push({ user: req.user._id, name: req.user.name, rating: Number(rating), comment });
-  product.updateRating();
-  await product.save();
-  res.status(201).json({ message: "Review added" });
+  if (error) {
+    if (error.code === '23505') return res.status(400).json({ message: 'You already reviewed this product' });
+    return res.status(400).json({ message: error.message });
+  }
+
+  res.status(201).json(data);
 });

@@ -1,20 +1,12 @@
-import express from "express";
-import { getAllUsers, getUserById, updateUser, saveAddress, deleteAddress, getWishlist, toggleWishlist } from "../controllers/userController.js";
-import { protect, adminOnly } from "../middleware/auth.js";
-
+import express from 'express';
+import { getWishlist, toggleWishlist, getAddresses, addAddress, updateAddress, deleteAddress } from '../controllers/userController.js';
+import { protect } from '../middleware/auth.js';
 const router = express.Router();
-
-// Wishlist
-router.get("/wishlist", protect, getWishlist);
-router.post("/wishlist", protect, toggleWishlist);
-
-// Addresses
-router.post("/address", protect, saveAddress);
-router.delete("/address/:addressId", protect, deleteAddress);
-
-// Admin
-router.get("/", protect, adminOnly, getAllUsers);
-router.get("/:id", protect, adminOnly, getUserById);
-router.put("/:id", protect, adminOnly, updateUser);
-
+router.use(protect);
+router.get('/wishlist', getWishlist);
+router.post('/wishlist/toggle', toggleWishlist);
+router.get('/addresses', getAddresses);
+router.post('/addresses', addAddress);
+router.put('/addresses/:id', updateAddress);
+router.delete('/addresses/:id', deleteAddress);
 export default router;

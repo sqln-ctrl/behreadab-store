@@ -1,81 +1,93 @@
-import asyncHandler from "express-async-handler";
-import User from "../models/User.js";
+import asyncHandler from 'express-async-handler';
+import supabase from '../config/supabase.js';
 
-// @GET /api/users  [admin]
-export const getAllUsers = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, search } = req.query;
-  const query = search ? { $or: [{ name: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] } : {};
-
-  const total = await User.countDocuments(query);
-  const users = await User.find(query)
-    .select("-password")
-    .sort("-createdAt")
-    .skip((Number(page) - 1) * Number(limit))
-    .limit(Number(limit));
-
-  res.json({ users, total });
-});
-
-// @GET /api/users/:id  [admin]
-export const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id).select("-password");
-  if (!user) return res.status(404).json({ message: "User not found" });
-  res.json(user);
-});
-
-// @PUT /api/users/:id  [admin] — toggle active, change role
-export const updateUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ message: "User not found" });
-
-  if (req.body.isActive !== undefined) user.isActive = req.body.isActive;
-  if (req.body.role) user.role = req.body.role;
-
-  const updated = await user.save();
-  res.json(updated.toJSON());
-});
-
-// @POST /api/users/address  — add/update address
-export const saveAddress = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
-  const addr = req.body;
-
-  if (addr.isDefault) {
-    user.addresses.forEach((a) => (a.isDefault = false));
-  }
-
-  if (addr._id) {
-    // update existing
-    const idx = user.addresses.findIndex((a) => a._id.toString() === addr._id);
-    if (idx !== -1) user.addresses[idx] = { ...user.addresses[idx].toObject(), ...addr };
-  } else {
-    user.addresses.push(addr);
-  }
-
-  await user.save();
-  res.json(user.addresses);
-});
-
-// @DELETE /api/users/address/:addressId
-export const deleteAddress = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
-  user.addresses = user.addresses.filter((a) => a._id.toString() !== req.params.addressId);
-  await user.save();
-  res.json(user.addresses);
-});
-
-// @GET/POST /api/users/wishlist
+// @GET /api/users/wishlist
 export const getWishlist = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).populate("wishlist");
-  res.json(user.wishlist);
+  const { data, error } = await supabase
+    .from('wishlist_items')
+    .select('*, products(id, name, image, price, rating, badge, category)')
+    .eq('user_id', req.user.id);
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
 });
 
+// @POST /api/users/wishlist/toggle
 export const toggleWishlist = asyncHandler(async (req, res) => {
-  const { productId } = req.body;
-  const user = await User.findById(req.user._id);
-  const idx = user.wishlist.indexOf(productId);
-  if (idx === -1) user.wishlist.push(productId);
-  else user.wishlist.splice(idx, 1);
-  await user.save();
-  res.json({ wishlisted: idx === -1 });
+  const { product_id } = req.body;
+
+  const { data: existing } = await supabase
+    .from('wishlist_items')
+    .select('id')
+    .eq('user_id', req.user.id)
+    .eq('product_id', product_id)
+    .single();
+
+  if (existing) {
+    await supabase.from('wishlist_items').delete().eq('id', existing.id);
+    return res.json({ wishlisted: false });
+  }
+
+  await supabase.from('wishlist_items').insert({ user_id: req.user.id, product_id });
+  res.json({ wishlisted: true });
+});
+
+// @GET /api/users/addresses
+export const getAddresses = asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from('addresses')
+    .select('*')
+    .eq('user_id', req.user.id)
+    .order('is_default', { ascending: false });
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
+});
+
+// @POST /api/users/addresses
+export const addAddress = asyncHandler(async (req, res) => {
+  const { full_name, phone, street, city, province, postal_code, is_default } = req.body;
+
+  if (is_default) {
+    await supabase.from('addresses')
+      .update({ is_default: false })
+      .eq('user_id', req.user.id);
+  }
+
+  const { data, error } = await supabase
+    .from('addresses')
+    .insert({ user_id: req.user.id, full_name, phone, street, city, province, postal_code: postal_code || '', is_default: !!is_default })
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.status(201).json(data);
+});
+
+// @PUT /api/users/addresses/:id
+export const updateAddress = asyncHandler(async (req, res) => {
+  if (req.body.is_default) {
+    await supabase.from('addresses').update({ is_default: false }).eq('user_id', req.user.id);
+  }
+
+  const { data, error } = await supabase
+    .from('addresses')
+    .update(req.body)
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id)
+    .select()
+    .single();
+
+  if (error) return res.status(400).json({ message: error.message });
+  res.json(data);
+});
+
+// @DELETE /api/users/addresses/:id
+export const deleteAddress = asyncHandler(async (req, res) => {
+  await supabase.from('addresses')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+
+  res.json({ message: 'Address deleted' });
 });
