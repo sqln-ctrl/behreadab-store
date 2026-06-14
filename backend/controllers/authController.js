@@ -28,8 +28,17 @@ export const login = asyncHandler(async (req, res) => {
 
   if (error) return res.status(401).json({ message: 'Invalid email or password' });
 
-  const { data: profile } = await supabase
-    .from('users').select('*').eq('id', data.user.id).single();
+  console.log('Auth UID:', data.user.id);
+
+  const { data: profile, error: profileError } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', data.user.id)
+    .single();
+
+  console.log('Profile:', profile);
+  console.log('Profile error:', profileError?.message);
+  console.log('Profile code:', profileError?.code);
 
   if (!profile?.is_active)
     return res.status(403).json({ message: 'Account has been deactivated' });
