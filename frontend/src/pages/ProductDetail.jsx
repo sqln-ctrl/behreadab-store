@@ -1,33 +1,56 @@
-import { useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaHeart, FaShoppingCart, FaArrowLeft, FaShieldAlt, FaTruck, FaUndo } from "react-icons/fa";
-import products from "../data/products";
 import useCart from "../hooks/useCart";
 import useWishlist from "../hooks/useWishlist";
 import Rating from "../components/Rating";
 import ProductCard from "../components/ProductCard";
+import Loader from "../components/Loader";
+import { productsAPI } from "../services/api";
 
 const ProductDetail = () => {
-  const { id }    = useParams();
-  const navigate  = useNavigate();
-  const product   = products.find((p) => p.id === Number(id));
-  const { addToCart }                  = useCart();
+  const { id }     = useParams();
+  const navigate   = useNavigate();
+  const { addToCart }                    = useCart();
   const { isWishlisted, toggleWishlist } = useWishlist();
 
+  const [product,     setProduct]     = useState(null);
+  const [related,     setRelated]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
   const [activeImage, setActiveImage] = useState(0);
-  const [quantity, setQuantity]       = useState(1);
-  const [added, setAdded]             = useState(false);
+  const [quantity,    setQuantity]    = useState(1);
+  const [added,       setAdded]       = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setActiveImage(0);
+    productsAPI.getById(id)
+      .then(({ data }) => {
+        setProduct(data);
+        // Fetch related
+        return productsAPI.getAll({ category: data.category, limit: 4 });
+      })
+      .then(({ data }) => {
+        setRelated((data.products || []).filter((p) => p.id !== id).slice(0, 3));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader /></div>;
 
   if (!product) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-5 text-center">
       <p className="text-6xl">🕐</p>
       <h2 className="text-2xl font-bold">Watch not found</h2>
-      <Link to="/shop" className="text-sm underline text-gray-500">Back to shop</Link>
+      <button onClick={() => navigate("/shop")} className="text-sm underline text-gray-500">Back to shop</button>
     </div>
   );
 
   const wishlisted = isWishlisted(product.id);
+  const stock      = product.inventory?.stock_qty ?? 0;
+  const available  = stock - (product.inventory?.reserved_qty ?? 0);
 
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) {
@@ -38,12 +61,10 @@ const ProductDetail = () => {
   };
 
   const perks = [
-    { icon: <FaTruck />,    label: "Free shipping over PKR 5,000" },
-    { icon: <FaShieldAlt />,label: "2-year warranty" },
-    { icon: <FaUndo />,     label: "30-day returns" },
+    { icon: <FaTruck />,     label: "Free shipping over PKR 5,000" },
+    { icon: <FaShieldAlt />, label: "2-year warranty" },
+    { icon: <FaUndo />,      label: "30-day returns" },
   ];
-
-  const related = products.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 3);
 
   return (
     <div className="min-h-screen bg-white">
@@ -88,33 +109,63 @@ const ProductDetail = () => {
             <h1 className="text-3xl md:text-4xl font-black leading-tight text-black" style={{ fontFamily: "'Georgia', serif" }}>
               {product.name}
             </h1>
-            <div className="mt-2"><Rating value={product.rating} count={product.reviews} size="lg" /></div>
-            <div className="mt-4">
-              <span className="text-3xl md:text-4xl font-black text-black">PKR {Number(product.price).toLocaleString()}</span>
+
+            {product.rating > 0 && (
+              <div className="mt-2"><Rating value={product.rating} count={product.num_reviews} size="lg" /></div>
+            )}
+
+            <div className="mt-4 flex items-baseline gap-3">
+              <span className="text-3xl md:text-4xl font-black text-black">
+                PKR {Number(product.price).toLocaleString()}
+              </span>
+              {product.original_price && product.original_price > product.price && (
+                <>
+                  <span className="text-lg text-gray-400 line-through">
+                    PKR {Number(product.original_price).toLocaleString()}
+                  </span>
+                  <span className="text-sm font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                    -{Math.round(((product.original_price - product.price) / product.original_price) * 100)}% OFF
+                  </span>
+                </>
+              )}
             </div>
+
+            {/* Stock */}
+            <div className="mt-3">
+              {available > 0 ? (
+                <span className={`text-sm font-semibold ${available <= 5 ? "text-orange-500" : "text-green-600"}`}>
+                  {available <= 5 ? `Only ${available} left!` : "✓ In Stock"}
+                </span>
+              ) : (
+                <span className="text-sm font-semibold text-red-500">Out of Stock</span>
+              )}
+            </div>
+
             <p className="mt-4 text-gray-500 leading-relaxed text-sm md:text-base">{product.description}</p>
 
             {/* Quantity */}
-            <div className="mt-7">
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-gray-600">Quantity</p>
-              <div className="flex items-center gap-4">
-                <motion.button onClick={() => setQuantity((q) => Math.max(1, q - 1))} whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 rounded-full border-2 font-bold text-lg flex items-center justify-center hover:border-black transition">−</motion.button>
-                <span className="text-xl font-bold w-6 text-center">{quantity}</span>
-                <motion.button onClick={() => setQuantity((q) => q + 1)} whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 rounded-full border-2 font-bold text-lg flex items-center justify-center hover:border-black transition">+</motion.button>
+            {available > 0 && (
+              <div className="mt-7">
+                <p className="text-xs font-semibold uppercase tracking-widest mb-3 text-gray-600">Quantity</p>
+                <div className="flex items-center gap-4">
+                  <motion.button onClick={() => setQuantity((q) => Math.max(1, q - 1))} whileTap={{ scale: 0.9 }}
+                    className="w-10 h-10 rounded-full border-2 font-bold text-lg flex items-center justify-center hover:border-black transition">−</motion.button>
+                  <span className="text-xl font-bold w-6 text-center">{quantity}</span>
+                  <motion.button onClick={() => setQuantity((q) => Math.min(available, q + 1))} whileTap={{ scale: 0.9 }}
+                    className="w-10 h-10 rounded-full border-2 font-bold text-lg flex items-center justify-center hover:border-black transition">+</motion.button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Actions */}
             <div className="mt-7 flex gap-3">
-              <motion.button onClick={handleAddToCart}
-                className="flex-1 flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm uppercase tracking-wider transition-all"
+              <motion.button onClick={handleAddToCart} disabled={available === 0}
+                className="flex-1 flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ background: added ? "#22c55e" : "#000", color: "#fff" }}
                 whileTap={{ scale: 0.97 }}
                 whileHover={{ background: added ? "#22c55e" : "#222" }}>
                 <FaShoppingCart />
-                {added ? "Added!" : "Add to Cart"}
+                {available === 0 ? "Out of Stock" : added ? "Added!" : "Add to Cart"}
               </motion.button>
               <motion.button onClick={() => toggleWishlist(product)} whileTap={{ scale: 0.9 }}
                 className="w-14 h-14 rounded-xl border-2 flex items-center justify-center text-xl transition-all flex-shrink-0"
@@ -146,7 +197,8 @@ const ProductDetail = () => {
                 <motion.div key={p.id} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.1, duration: 0.5 }}>
                   <ProductCard id={p.id} image={p.image} name={p.name} price={p.price}
-                    rating={p.rating} reviews={p.reviews} category={p.category} badge={p.badge} />
+                    originalPrice={p.original_price} rating={p.rating}
+                    reviews={p.num_reviews} category={p.category} badge={p.badge} />
                 </motion.div>
               ))}
             </div>

@@ -335,3 +335,25 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ─────────────────────────────────────────
+-- DISCOUNTS (add to existing schema)
+-- ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.discounts (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  product_id      UUID REFERENCES public.products(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL CHECK (type IN ('percentage', 'fixed')),
+  value           NUMERIC(10,2) NOT NULL CHECK (value > 0),
+  starts_at       TIMESTAMPTZ,
+  ends_at         TIMESTAMPTZ,
+  is_active       BOOLEAN DEFAULT true,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.discounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public_read_discounts" ON public.discounts FOR SELECT USING (is_active = true);
+CREATE POLICY "admin_all_discounts" ON public.discounts FOR ALL
+  USING ((SELECT role FROM public.users WHERE id = auth.uid()) = 'admin');
+
+-- Add original_price column to products for showing crossed-out price
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC(12,2) DEFAULT NULL;
