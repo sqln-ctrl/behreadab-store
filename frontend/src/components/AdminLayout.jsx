@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FaChartBar, FaBox, FaShoppingBag, FaUsers, FaImage,
-  FaWarehouse, FaTruck, FaFileInvoiceDollar, FaBars,
+  FaWarehouse, FaTruck, FaFileInvoiceDollar, FaTag, FaBars,
   FaTimes, FaSignOutAlt, FaStore
 } from "react-icons/fa";
 import useAuth from "../hooks/useAuth";

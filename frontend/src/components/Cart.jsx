@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTrash, FaArrowLeft, FaShoppingBag } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import useCart from "../hooks/useCart";
 
 const Cart = () => {
   const { cartItems, removeFromCart } = useCart();
+  const navigate = useNavigate();
 
   const grouped = cartItems.reduce((acc, item) => {
     const existing = acc.find((i) => i.id === item.id);
@@ -14,6 +15,8 @@ const Cart = () => {
   }, []);
 
   const total = cartItems.reduce((acc, item) => acc + item.price, 0);
+  const shippingCost = total >= 5000 ? 0 : 500;
+  const grandTotal   = total + shippingCost;
 
   return (
     <div className="min-h-screen bg-white">
@@ -52,11 +55,14 @@ const Cart = () => {
                     initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.3 }}
                     className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100">
-                    <img src={item.image} alt={item.name} className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover flex-shrink-0" />
+                    <img src={item.image} alt={item.name}
+                      className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-gray-900 text-sm md:text-base truncate">{item.name}</h3>
                       <p className="text-xs text-gray-400 mt-0.5">Qty: {item.qty}</p>
-                      <p className="font-black mt-1 text-sm md:text-base text-black">PKR {Number(item.price * item.qty).toLocaleString()}</p>
+                      <p className="font-black mt-1 text-sm md:text-base text-black">
+                        PKR {Number(item.price * item.qty).toLocaleString()}
+                      </p>
                     </div>
                     <motion.button onClick={() => removeFromCart(item.id)} whileTap={{ scale: 0.9 }}
                       className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition flex-shrink-0">
@@ -73,25 +79,31 @@ const Cart = () => {
                 <h2 className="font-black text-lg md:text-xl mb-5" style={{ fontFamily: "'Georgia', serif" }}>Summary</h2>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between text-white/60">
-                    <span>Subtotal</span><span>PKR {Number(total).toLocaleString()}</span>
+                    <span>Subtotal</span>
+                    <span>PKR {Number(total).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-white/60">
                     <span>Shipping</span>
-                    <span className={total >= 5000 ? "text-green-400 font-medium" : ""}>
-                      {total >= 5000 ? "Free" : "PKR 500"}
+                    <span className={shippingCost === 0 ? "text-green-400 font-medium" : ""}>
+                      {shippingCost === 0 ? "Free" : `PKR ${shippingCost}`}
                     </span>
                   </div>
                   <div className="border-t border-white/10 pt-3 flex justify-between font-black text-base md:text-lg">
                     <span>Total</span>
-                    <span>PKR {total >= 5000 ? Number(total).toLocaleString() : Number(total + 500).toLocaleString()}</span>
+                    <span>PKR {Number(grandTotal).toLocaleString()}</span>
                   </div>
                 </div>
                 {total < 5000 && (
-                  <p className="text-xs text-white/40 mt-2 text-center">Add PKR {Number(5000 - total).toLocaleString()} more for free shipping</p>
+                  <p className="text-xs text-white/40 mt-2 text-center">
+                    Add PKR {Number(5000 - total).toLocaleString()} more for free shipping
+                  </p>
                 )}
-                <motion.button whileTap={{ scale: 0.97 }}
-                  className="w-full mt-5 py-4 rounded-xl font-bold text-sm uppercase tracking-widest bg-white text-black hover:bg-gray-100 transition">
-                  Checkout
+                <motion.button
+                  onClick={() => navigate("/checkout")}
+                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ background: "#e5e7eb" }}
+                  className="w-full mt-5 py-4 rounded-xl font-bold text-sm uppercase tracking-widest bg-white text-black transition">
+                  Proceed to Checkout
                 </motion.button>
                 <p className="text-xs text-white/30 text-center mt-2">SSL encrypted · Secure checkout</p>
               </div>
