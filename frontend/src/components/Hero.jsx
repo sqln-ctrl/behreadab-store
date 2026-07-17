@@ -56,7 +56,7 @@ const Hero = () => {
   const imageUrl      = config?.image_url     || "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=500&q=85";
   const badgeText     = config?.badge_text    || "New Arrival";
   const badgeSub      = config?.badge_sub     || "Swiss Collection 2025";
-  const fromPrice     = config?.from_price    || "48,000";
+  const fromPrice     = config?.from_price    || "4566";
   const discountText  = config?.discount_text || "";
   const ctaText       = config?.cta_text      || "Shop Now";
 

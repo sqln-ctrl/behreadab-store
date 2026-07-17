@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaHeart, FaShoppingCart, FaUser, FaBars, FaTimes, FaBox, FaSignOutAlt, FaShieldAlt } from "react-icons/fa";
 import useCart from "../hooks/useCart";
 import useAuth from "../hooks/useAuth";
+import { MdWatch } from "react-icons/md";
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -28,153 +29,200 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const isCompact = scrolled;
+
   const navLinks = [
     { label: "Home", to: "/" },
     { label: "Shop", to: "/shop" },
   ];
 
+  const expandNav = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <>
      <motion.nav
+      layout
       initial={{ y: -80, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-7xl"
+      animate={{
+        y: 0,
+        opacity: 1,
+        width: isCompact ? 56 : "95%",
+        height: isCompact ? 56 : "auto",
+      }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-7xl overflow-hidden"
       style={{
         background: "rgba(0,0,0,0.78)",
         backdropFilter: "blur(20px)",
         border: "1px solid rgba(255,255,255,0.06)",
         borderRadius: "999px",
         boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+        cursor: isCompact ? "pointer" : "default",
       }}
+      onClick={isCompact ? expandNav : undefined}
       >
-        <div className="px-6 md:px-8 py-2.5 flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/">
-            <motion.div className="flex items-center gap-3" whileHover={{ opacity: 0.85 }} transition={{ duration: 0.2 }}>
-              <img src="/logo.jpg" alt="Andaaz" className="h-10 w-10 rounded-full object-cover" style={{ filter: "invert(1)" }} />
-              <span className="text-white font-black text-xl tracking-tight hidden sm:block" style={{ fontFamily: "'Georgia', serif" }}>
-                Andaaz
-              </span>
+        <AnimatePresence mode="wait" initial={false}>
+          {isCompact ? (
+            <motion.div
+              key="compact"
+              initial={{ opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.6 }}
+              transition={{ duration: 0.25 }}
+              className="w-14 h-14 flex items-center justify-center"
+              title="Scroll to top"
+            >
+              <img
+                src="/logo.jpg"
+                alt="Andaaz"
+                className="h-8 w-8 rounded-full object-cover"
+                style={{ filter: "invert(1)" }}
+              />
+              {cartItems.length > 0 && (
+                <span className="absolute top-1 right-1 bg-white text-black text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-black">
+                  {cartItems.length}
+                </span>
+              )}
             </motion.div>
-          </Link>
+          ) : (
+            <motion.div
+              key="full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, delay: 0.1 }}
+              className="px-6 md:px-8 py-2.5 flex items-center justify-between"
+            >
+              {/* Logo */}
+              <Link to="/">
+                <motion.div className="flex items-center gap-3" whileHover={{ opacity: 0.85 }} transition={{ duration: 0.2 }}>
+                  <img src="/logo.jpg" alt="Andaaz" className="h-10 w-10 rounded-full object-cover" style={{ filter: "invert(1)" }} />
+                  <span className="text-white font-black text-xl tracking-tight hidden sm:block" style={{ fontFamily: "'Georgia', serif" }}>
+                    Andaaz
+                  </span>
+                </motion.div>
+              </Link>
 
-          {/* Desktop nav */}
-          <ul className="hidden md:flex items-center gap-8">
-            {navLinks.map(({ label, to }, i) => (
-              <motion.li key={label} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.07 }}>
-                <Link to={to}>
-                  <motion.span
-                    className="text-gray-300 text-sm uppercase tracking-widest relative"
-                    whileHover={{ color: "#ffffff" }}
-                  >
-                    {label}
-                    {location.pathname === to && (
-                      <motion.span layoutId="nav-underline"
-                        className="absolute -bottom-1 left-0 right-0 h-0.5 bg-white" />
-                    )}
-                  </motion.span>
-                </Link>
-              </motion.li>
-            ))}
-          </ul>
-
-          {/* Icons */}
-          <div className="flex items-center gap-6 text-lg text-gray-300">
-            <motion.button whileHover={{ color: "#fff", scale: 1.15 }} whileTap={{ scale: 0.9 }}>
-              <FaHeart />
-            </motion.button>
-
-            <Link to="/cart">
-              <motion.button className="relative" whileHover={{ color: "#fff", scale: 1.15 }} whileTap={{ scale: 0.9 }}>
-                <FaShoppingCart />
-                <AnimatePresence>
-                  {cartItems.length > 0 && (
-                    <motion.span key={cartItems.length}
-                      initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-                      className="absolute -top-2 -right-3 bg-white text-black text-xs w-5 h-5 rounded-full flex items-center justify-center font-black">
-                      {cartItems.length}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </motion.button>
-            </Link>
-
-            {/* User menu */}
-            <div className="relative hidden md:block" ref={userMenuRef}>
-              <motion.button onClick={() => setUserMenuOpen(!userMenuOpen)}
-                whileHover={{ color: "#fff", scale: 1.15 }} whileTap={{ scale: 0.9 }}
-                className="flex items-center gap-2">
-                {user ? (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white text-black text-xs font-black">
-                    {user.name?.[0]?.toUpperCase()}
-                  </div>
-                ) : <FaUser />}
-              </motion.button>
-
-              <AnimatePresence>
-                {userMenuOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="absolute right-0 top-12 bg-white rounded-2xl shadow-2xl w-52 py-2 z-50 border border-gray-100">
-                    {user ? (
-                      <>
-                        <div className="px-4 py-3 border-b">
-                          <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
-                          <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                        </div>
-                        <Link to="/profile">
-                          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
-                            <FaUser className="text-gray-400" /> My Profile
-                          </button>
-                        </Link>
-                        <Link to="/orders">
-                          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
-                            <FaBox className="text-gray-400" /> My Orders
-                          </button>
-                        </Link>
-                        {isAdmin && (
-                          <Link to="/admin/dashboard">
-                            <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
-                              <FaShieldAlt className="text-black" /> Admin Panel
-                            </button>
-                          </Link>
+              {/* Desktop nav */}
+              <ul className="hidden md:flex items-center gap-8">
+                {navLinks.map(({ label, to }, i) => (
+                  <motion.li key={label} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.07 }}>
+                    <Link to={to}>
+                      <motion.span
+                        className="text-gray-300 text-sm uppercase tracking-widest relative"
+                        whileHover={{ color: "#ffffff" }}
+                      >
+                        {label}
+                        {location.pathname === to && (
+                          <motion.span layoutId="nav-underline"
+                            className="absolute -bottom-1 left-0 right-0 h-0.5 bg-white" />
                         )}
-                        <div className="border-t mt-1 pt-1">
-                          <button onClick={logout}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition">
-                            <FaSignOutAlt /> Sign Out
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <Link to="/login">
-                          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
-                            <FaUser className="text-gray-400" /> Sign In
-                          </button>
-                        </Link>
-                        <Link to="/register">
-                          <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
-                            <FaUser className="text-gray-400" /> Create Account
-                          </button>
-                        </Link>
-                      </>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                      </motion.span>
+                    </Link>
+                  </motion.li>
+                ))}
+              </ul>
 
-            {/* Mobile hamburger */}
-            <motion.button className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)} whileTap={{ scale: 0.9 }}>
-              {mobileOpen ? <FaTimes /> : <FaBars />}
-            </motion.button>
-          </div>
-        </div>
+              {/* Icons */}
+              <div className="flex items-center gap-6 text-lg text-gray-300">
+                <motion.button whileHover={{ color: "#fff", scale: 1.15 }} whileTap={{ scale: 0.9 }}>
+                  <FaHeart />
+                </motion.button>
+
+                <Link to="/cart">
+                  <motion.button className="relative" whileHover={{ color: "#fff", scale: 1.15 }} whileTap={{ scale: 0.9 }}>
+                    <FaShoppingCart />
+                    <AnimatePresence>
+                      {cartItems.length > 0 && (
+                        <motion.span key={cartItems.length}
+                          initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                          className="absolute -top-2 -right-3 bg-white text-black text-xs w-5 h-5 rounded-full flex items-center justify-center font-black">
+                          {cartItems.length}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                </Link>
+
+                {/* User menu */}
+                <div className="relative hidden md:block" ref={userMenuRef}>
+                  <motion.button onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    whileHover={{ color: "#fff", scale: 1.15 }} whileTap={{ scale: 0.9 }}
+                    className="flex items-center gap-2">
+                    {user ? (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white text-black text-xs font-black">
+                        {user.name?.[0]?.toUpperCase()}
+                      </div>
+                    ) : <FaUser />}
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {userMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute right-0 top-12 bg-white rounded-2xl shadow-2xl w-52 py-2 z-50 border border-gray-100">
+                        {user ? (
+                          <>
+                            <div className="px-4 py-3 border-b">
+                              <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
+                              <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                            </div>
+                            <Link to="/profile">
+                              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                                <FaUser className="text-gray-400" /> My Profile
+                              </button>
+                            </Link>
+                            <Link to="/orders">
+                              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                                <FaBox className="text-gray-400" /> My Orders
+                              </button>
+                            </Link>
+                            {isAdmin && (
+                              <Link to="/admin/dashboard">
+                                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                                  <FaShieldAlt className="text-black" /> Admin Panel
+                                </button>
+                              </Link>
+                            )}
+                            <div className="border-t mt-1 pt-1">
+                              <button onClick={logout}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition">
+                                <FaSignOutAlt /> Sign Out
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <Link to="/login">
+                              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                                <FaUser className="text-gray-400" /> Sign In
+                              </button>
+                            </Link>
+                            <Link to="/register">
+                              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition">
+                                <FaUser className="text-gray-400" /> Create Account
+                              </button>
+                            </Link>
+                          </>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Mobile hamburger */}
+                <motion.button className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)} whileTap={{ scale: 0.9 }}>
+                  {mobileOpen ? <FaTimes /> : <FaBars />}
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.nav>
 
       {/* Mobile drawer */}
