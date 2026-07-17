@@ -43,26 +43,27 @@ const Navbar = () => {
   return (
     <>
      <motion.nav
-      layout
-      initial={{ y: -80, opacity: 0 }}
-      animate={{
-        y: 0,
-        opacity: 1,
-        width: isCompact ? 56 : "95%",
-        height: isCompact ? 56 : "auto",
-      }}
-      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-7xl overflow-hidden"
-      style={{
-        background: "rgba(0,0,0,0.78)",
-        backdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "999px",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-        cursor: isCompact ? "pointer" : "default",
-      }}
-      onClick={isCompact ? expandNav : undefined}
-      >
+  layout
+  initial={{ y: -80, opacity: 0 }}
+  animate={{
+    y: 0,
+    opacity: 1,
+    width: isCompact ? 56 : "95%",
+    height: isCompact ? 56 : "auto",
+  }}
+  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+  className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-7xl"
+  style={{
+    background: "rgba(0,0,0,0.78)",
+    backdropFilter: "blur(20px)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    borderRadius: "999px",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+    cursor: isCompact ? "pointer" : "default",
+    overflow: isCompact ? "hidden" : "visible",
+  }}
+  onClick={isCompact ? expandNav : undefined}
+>
         <AnimatePresence mode="wait" initial={false}>
           {isCompact ? (
             <motion.div
