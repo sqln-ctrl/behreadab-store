@@ -1,14 +1,15 @@
-import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
+import FeaturedWatches from "../components/FeaturedWatches";
+import Categories from "../components/Categories";
 import Testimonials from "../components/Testimonials";
-// import Newsletter from "../components/Newsletter";
-import Footer from "../components/Footer";
 
-function Home () {
+function Home() {
   return (
     <>
       <Hero />
-      <Testimonials/>
+      <FeaturedWatches />
+      <Categories />
+      <Testimonials />
     </>
   );
 }

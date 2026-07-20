@@ -1,0 +1,10 @@
+import express from 'express';
+import { getAllReviews, createManualReview, featureReview, deleteReview, getFeaturedReviews } from '../controllers/reviewController.js';
+import { protect, adminOnly } from '../middleware/auth.js';
+const router = express.Router();
+router.get('/featured', getFeaturedReviews);
+router.get('/', protect, adminOnly, getAllReviews);
+router.post('/manual', protect, adminOnly, createManualReview);
+router.put('/:id/feature', protect, adminOnly, featureReview);
+router.delete('/:id', protect, adminOnly, deleteReview);
+export default router;

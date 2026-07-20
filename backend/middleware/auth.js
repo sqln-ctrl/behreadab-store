@@ -1,34 +1,23 @@
+import dotenv from 'dotenv';
+dotenv.config();
+import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import supabase from '../config/supabase.js';
 
 export const protect = async (req, res, next) => {
   const token = req.headers.authorization?.split('Bearer ')[1];
   if (!token) return res.status(401).json({ message: 'No token provided' });
-
   try {
-    // Verify the JWT using service role client
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      console.log('Auth error:', error?.message);
-      return res.status(401).json({ message: 'Invalid or expired token' });
-    }
-
-    // Fetch profile — service role bypasses RLS, no recursion issue
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    console.log('Profile fetch:', profile?.email, profileError?.message);
-
-    if (!profile) return res.status(401).json({ message: 'User profile not found' });
+    const authClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { autoRefreshToken: false, persistSession: false }, realtime: { transport: ws } });
+    const { data: { user }, error } = await authClient.auth.getUser(token);
+    if (error || !user) return res.status(401).json({ message: 'Invalid token' });
+    const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single();
+    if (!profile) return res.status(401).json({ message: 'User not found' });
     if (!profile.is_active) return res.status(403).json({ message: 'Account deactivated' });
-
     req.user = profile;
     next();
   } catch (err) {
-    console.error('Auth middleware error:', err);
     return res.status(401).json({ message: 'Authentication failed' });
   }
 };
