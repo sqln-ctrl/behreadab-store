@@ -24,8 +24,20 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: (origin, callback) => {
+    const allowed = [
+      'https://behreadab-store.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:5174',
+    ];
+    // Allow requests with no origin (mobile apps, curl, etc)
+    if (!origin || allowed.includes(origin) || /^http:\/\/192\.168\.\d+\.\d+/.test(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
