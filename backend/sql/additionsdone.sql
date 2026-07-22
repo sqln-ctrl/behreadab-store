@@ -43,16 +43,3 @@ BEGIN
     EXECUTE format('CREATE POLICY "service_role_%s" ON public.%s FOR ALL USING (true) WITH CHECK (true)', tbl, tbl);
   END LOOP;
 END $$;
-
--- Guest order support
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS guest_email  TEXT;
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS source       TEXT DEFAULT 'website';
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_manual    BOOLEAN DEFAULT false;
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_confirmed BOOLEAN DEFAULT false;
-
--- Hero config new columns for AdminHero controls
-ALTER TABLE public.hero_config ADD COLUMN IF NOT EXISTS product_size      INTEGER DEFAULT 280;
-ALTER TABLE public.hero_config ADD COLUMN IF NOT EXISTS product_position  TEXT DEFAULT 'right';
-ALTER TABLE public.hero_config ADD COLUMN IF NOT EXISTS hero_height       TEXT DEFAULT '100vh';
-ALTER TABLE public.hero_config ADD COLUMN IF NOT EXISTS bg_opacity        INTEGER DEFAULT 20;
-ALTER TABLE public.hero_config ADD COLUMN IF NOT EXISTS show_bg_media     BOOLEAN DEFAULT true;

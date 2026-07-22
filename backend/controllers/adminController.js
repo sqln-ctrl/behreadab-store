@@ -33,25 +33,65 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
 });
 
 export const getHeroConfig = asyncHandler(async (req, res) => {
-  const { data } = await supabase.from('hero_config').select('*').limit(1).single();
-  res.json(data || {
-    headline: 'Andaaz', subheadline: 'اندازِ وقت',
-    subtext: 'Premium watches crafted for those who understand that time is not just measured — it is worn.',
-    image_url: '', badge_text: 'New Arrival', badge_sub: 'Swiss Collection 2025',
-    from_price: '48000', discount_text: '', cta_text: 'Shop Now',
-    featured_product_id: null, featured_image_index: 0,
-  });
+  const { data, error } = await supabase.from('hero_config').select('*').limit(1).single();
+
+  // Return defaults if no row exists yet
+  if (error || !data) {
+    return res.json({
+      headline: 'Andaaz', subheadline: 'اندازِ وقت',
+      subtext: 'Premium watches crafted for those who understand that time is not just measured — it is worn.',
+      image_url: '', badge_text: '', badge_sub: '', from_price: '', discount_text: '', cta_text: 'Shop Now',
+      featured_product_id: null, featured_image_index: 0,
+      product_size: 280, product_position: 'right',
+      hero_height: '100vh', bg_opacity: 20, show_bg_media: true,
+    });
+  }
+  res.json(data);
 });
 
 export const updateHeroConfig = asyncHandler(async (req, res) => {
-  const { data: existing } = await supabase.from('hero_config').select('id').limit(1).single();
-  let result;
-  if (existing) {
-    result = await supabase.from('hero_config').update(req.body).eq('id', existing.id).select().single();
-  } else {
-    result = await supabase.from('hero_config').insert(req.body).select().single();
+  // Remove undefined/null keys that would cause issues
+  const body = { ...req.body };
+
+  // Clean up: ensure numeric fields are numbers
+  if (body.product_size        !== undefined) body.product_size        = Number(body.product_size);
+  if (body.featured_image_index !== undefined) body.featured_image_index = Number(body.featured_image_index);
+  if (body.bg_opacity          !== undefined) body.bg_opacity          = Number(body.bg_opacity);
+
+  // Remove empty string product ID (should be null)
+  if (body.featured_product_id === '' || body.featured_product_id === undefined) {
+    body.featured_product_id = null;
   }
-  if (result.error) return res.status(400).json({ message: result.error.message });
+
+  console.log('[Hero] Saving:', JSON.stringify(body, null, 2));
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('hero_config').select('id').limit(1).single();
+
+  let result;
+  if (existing?.id) {
+    // Update existing row
+    result = await supabase
+      .from('hero_config')
+      .update(body)
+      .eq('id', existing.id)
+      .select()
+      .single();
+  } else {
+    // No row exists — insert first row
+    result = await supabase
+      .from('hero_config')
+      .insert(body)
+      .select()
+      .single();
+  }
+
+  if (result.error) {
+    console.error('[Hero] Save error:', result.error);
+    return res.status(400).json({ message: result.error.message, details: result.error.details });
+  }
+
+  console.log('[Hero] Saved successfully:', result.data?.id);
   res.json(result.data);
 });
 
