@@ -1,13 +1,8 @@
 {
   "name": "watchstore-backend",
-  "version": "1.0.0",
-  "description": "WatchStore backend — Supabase + Express",
-  "main": "server.js",
+  "version": "2.0.0",
   "type": "module",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
+  "scripts": { "start": "node server.js", "dev": "nodemon server.js" },
   "dependencies": {
     "@supabase/supabase-js": "^2.46.2",
     "cloudinary": "^1.41.3",
@@ -20,7 +15,5 @@
     "multer-storage-cloudinary": "^4.0.0",
     "ws": "^8.18.0"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.7"
-  }
+  "devDependencies": { "nodemon": "^3.1.7" }
 }

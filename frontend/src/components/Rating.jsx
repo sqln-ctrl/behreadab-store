@@ -1,29 +1,17 @@
-const Rating = ({ value, count, size = "sm" }) => {
-  const stars = Array.from({ length: 5 }, (_, i) => {
-    if (i < Math.floor(value)) return "full";
-    if (i < value) return "half";
-    return "empty";
-  });
-
-  const sz = size === "lg" ? "text-lg" : "text-sm";
-
+import { FaStar, FaStarHalfAlt, FaRegStar } from "react-icons/fa";
+const Rating = ({ value = 0, count, size = "sm" }) => {
+  const sz = size === "lg" ? "text-base" : "text-xs";
   return (
-    <div className="flex items-center gap-1.5">
-      <div className={`flex ${sz}`}>
-        {stars.map((type, i) => (
-          <span
-            key={i}
-            style={{ color: type !== "empty" ? "#d4af37" : "#d1d5db" }}
-          >
-            {type === "full" ? "★" : type === "half" ? "⯨" : "☆"}
-          </span>
-        ))}
+    <div className="flex items-center gap-1">
+      <div className="flex gap-0.5">
+        {[1,2,3,4,5].map(s => {
+          if (value >= s)       return <FaStar      key={s} className={`${sz} text-yellow-400`} />;
+          if (value >= s - 0.5) return <FaStarHalfAlt key={s} className={`${sz} text-yellow-400`} />;
+          return <FaRegStar key={s} className={`${sz} text-gray-200`} />;
+        })}
       </div>
-      {count !== undefined && (
-        <span className="text-xs text-gray-400">({count})</span>
-      )}
+      {count !== undefined && <span className="text-xs text-gray-400">({count})</span>}
     </div>
   );
 };
-
 export default Rating;
