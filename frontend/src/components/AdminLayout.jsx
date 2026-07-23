@@ -11,7 +11,8 @@ const navGroups = [
     { to: "/admin/orders",    label: "Orders",      icon: <FaShoppingBag /> },
     { to: "/admin/users",     label: "Users",       icon: <FaUsers /> },
     { to: "/admin/reviews",   label: "Reviews",     icon: <FaStar /> },
-    { to: "/admin/hero",      label: "Hero Editor", icon: <FaImage /> },
+    { to: "/admin/hero",       label: "Hero Editor",  icon: <FaImage /> },
+    { to: "/admin/categories", label: "Categories",   icon: <FaTag /> },
     { to: "/admin/discounts", label: "Discounts",   icon: <FaTag /> },
   ]},
   { label: "Inventory", items: [

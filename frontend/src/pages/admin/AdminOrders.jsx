@@ -149,7 +149,7 @@ const AdminOrders = () => {
               {!loading && orders.length===0 && <tr><td colSpan={8} className="text-center py-12 text-gray-400">No orders found</td></tr>}
               {orders.map(order=>{
                 const style = STATUS_STYLES[order.status]||{ bg:"#f3f4f6", text:"#374151" };
-                const customerName = order.users?.name || order.guest_email?.split("@")[0] || "Guest";
+                const customerName = order.is_manual ? (order.shipping_address?.full_name || order.customer_name || "Manual Order") : (order.users?.name || order.guest_email?.split("@")[0] || "Guest");
                 return (
                   <tr key={order.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-3">
@@ -221,7 +221,7 @@ const AdminOrders = () => {
                 {/* Customer info */}
                 <div className="bg-gray-50 rounded-xl p-4">
                   <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Customer</p>
-                  <p className="font-semibold">{selectedOrder.users?.name || "Guest"}</p>
+                  <p className="font-semibold">{selectedOrder.is_manual ? (selectedOrder.shipping_address?.full_name || selectedOrder.customer_name || "Manual Customer") : (selectedOrder.users?.name || "Guest")}</p>
                   <p className="text-xs text-gray-500">{selectedOrder.users?.email || selectedOrder.guest_email}</p>
                   {selectedOrder.shipping_address && (
                     <div className="mt-2 text-xs text-gray-600 space-y-0.5">

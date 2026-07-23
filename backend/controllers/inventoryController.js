@@ -1,6 +1,19 @@
 import asyncHandler from 'express-async-handler';
 import supabase from '../config/supabase.js';
-export const getInventory    = asyncHandler(async (req, res) => { const { data, error } = await supabase.from('inventory').select('*, products(id,name,image,category,price,is_active)').order('stock_qty', { ascending: true }); if (error) return res.status(400).json({ message: error.message }); res.json(data.map(i=>({...i, available_qty: i.stock_qty-i.reserved_qty, is_low_stock: i.stock_qty<=i.reorder_point}))); });
+
+// Only show inventory for products that exist in products table (active or inactive)
+export const getInventory = asyncHandler(async (req, res) => {
+  const { data, error } = await supabase.from('inventory')
+    .select('*, products!inner(id, name, image, category, price, is_active)')
+    .order('stock_qty', { ascending: true });
+  if (error) return res.status(400).json({ message: error.message });
+  res.json((data||[]).map(i => ({
+    ...i,
+    available_qty: Math.max(0, i.stock_qty - i.reserved_qty),
+    is_low_stock:  i.stock_qty <= i.reorder_point,
+  })));
+});
+
 export const adjustStock     = asyncHandler(async (req, res) => { const { product_id, qty_change, type='adjustment', notes='' } = req.body; if (!product_id||qty_change===undefined) return res.status(400).json({ message: 'product_id and qty_change required' }); const { data, error } = await supabase.from('inventory_transactions').insert({ product_id, type, qty_change: Number(qty_change), notes }).select().single(); if (error) return res.status(400).json({ message: error.message }); res.json(data); });
 export const getTransactions = asyncHandler(async (req, res) => { const { page=1, limit=30 } = req.query; const from=(Number(page)-1)*Number(limit); const { data, error, count } = await supabase.from('inventory_transactions').select('*, products(name,image)', { count:'exact' }).order('created_at', { ascending:false }).range(from, from+Number(limit)-1); if (error) return res.status(400).json({ message: error.message }); res.json({ transactions: data, total: count }); });
 export const getSuppliers    = asyncHandler(async (req, res) => { const { data, error } = await supabase.from('suppliers').select('*, purchase_orders(id,status,total_cost)').eq('is_active', true).order('name'); if (error) return res.status(400).json({ message: error.message }); res.json(data); });

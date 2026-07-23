@@ -28,11 +28,12 @@ import AdminAccounting     from "./pages/admin/AdminAccounting";
 import AdminDiscounts      from "./pages/admin/AdminDiscounts";
 import AdminReviews        from "./pages/admin/AdminReviews";
 import AdminSettings       from "./pages/admin/AdminSettings";
+import AdminCategories     from "./pages/admin/AdminCategories";
 import OrderReceipt        from "./pages/admin/OrderReceipt";
 
-const NO_NAVBAR = ["/login", "/register", "/checkout"];
-const NO_FOOTER = ["/login", "/register", "/checkout"];
-const ADMIN_PREFIX = "/admin";
+const NO_NAVBAR  = ["/login", "/register", "/checkout"];
+const NO_FOOTER  = ["/login", "/register", "/checkout"];
+const ADMIN_PFX  = "/admin";
 
 const pageVariants = {
   initial: { opacity: 0, y: 10 },
@@ -41,10 +42,9 @@ const pageVariants = {
 };
 
 const PublicRoutes = () => {
-  const location = useLocation();
+  const location  = useLocation();
   const showNavbar = !NO_NAVBAR.includes(location.pathname);
   const showFooter = !NO_FOOTER.includes(location.pathname);
-
   return (
     <>
       {showNavbar && <Navbar />}
@@ -78,6 +78,7 @@ const AdminRoutes = () => (
         <Route path="/admin/orders/:id/receipt" element={<OrderReceipt />} />
         <Route path="/admin/users"           element={<AdminUsers />} />
         <Route path="/admin/hero"            element={<AdminHero />} />
+        <Route path="/admin/categories"      element={<AdminCategories />} />
         <Route path="/admin/inventory"       element={<AdminInventory />} />
         <Route path="/admin/suppliers"       element={<AdminSuppliers />} />
         <Route path="/admin/purchase-orders" element={<AdminPurchaseOrders />} />
@@ -92,9 +93,8 @@ const AdminRoutes = () => (
 
 const AppRouter = () => {
   const location = useLocation();
-  const isAdmin  = location.pathname.startsWith(ADMIN_PREFIX);
+  const isAdmin  = location.pathname.startsWith(ADMIN_PFX);
   const isReceipt = /^\/admin\/orders\/.+\/receipt$/.test(location.pathname);
-
   if (isAdmin) {
     if (isReceipt) return <AdminRoute><Routes><Route path="/admin/orders/:id/receipt" element={<OrderReceipt />} /></Routes></AdminRoute>;
     return <AdminRoutes />;
