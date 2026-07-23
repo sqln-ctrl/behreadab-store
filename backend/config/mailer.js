@@ -16,6 +16,8 @@ const createTransporter = () => {
 
 return {
   transporter: nodemailer.createTransport({
+      logger: true,
+  debug: true,
     host,
     port,
     secure: true,
