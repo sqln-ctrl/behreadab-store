@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 // Create transporter from env variables
 const createTransporter = () => {
   const host     = process.env.MAIL_HOST     || 'smtp.gmail.com';
-  const port     = Number(process.env.MAIL_PORT) || 587;
+  const port     = Number(process.env.MAIL_PORT) || 465;
   const user     = process.env.MAIL_USER;
   const pass     = process.env.MAIL_PASS;
   const fromName = process.env.MAIL_FROM_NAME || 'Andaaz Watches';
