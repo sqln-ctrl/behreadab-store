@@ -32,6 +32,7 @@ return {
   }),
   from: `"${fromName}" <${fromEmail}>`,
 };
+  }; 
 
 // ── Order confirmation email ───────────────────────────────────────
 export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, items, itemsTotal, shippingCost, totalAmount, paymentMethod, shippingAddress }) => {
