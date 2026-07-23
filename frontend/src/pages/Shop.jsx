@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import Pagination from "../components/Pagination";
 import { productsAPI } from "../services/api";
+import api from "../services/api";
 
 const SORT_OPTIONS = [
   { value: "default",    label: "Featured",         icon: <FaFire className="text-xs" /> },
@@ -30,7 +31,13 @@ const Shop = () => {
   const [searchInput, setSearchInput] = useState(search);
   const headerRef = useRef(null);
 
-  const categories = ["All", "Men", "Women", "Unisex"];
+  const [categories, setCategories] = useState(["All"]);
+
+  useEffect(() => {
+    api.get("/categories").then(({ data }) => {
+      setCategories(["All", ...data.map(c => c.name)]);
+    }).catch(console.error);
+  }, []);
 
   const fetchProducts = async () => {
     setLoading(true);

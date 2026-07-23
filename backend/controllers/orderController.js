@@ -1,5 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import supabase from '../config/supabase.js';
+import { sendOrderConfirmationEmail } from '../config/mailer.js';
 
 const getSettings = async () => {
   const { data } = await supabase.from('store_settings').select('*').limit(1).single();
@@ -12,8 +13,6 @@ export const createOrder = asyncHandler(async (req, res) => {
   if (!items?.length) return res.status(400).json({ message: 'No items in order' });
 
   const userId = req.user?.id || null;
-
-  // For guest orders, require an email so we can contact them
   if (!userId && !guestEmail) return res.status(400).json({ message: 'Email required for guest checkout' });
 
   const settings = await getSettings();
@@ -35,15 +34,10 @@ export const createOrder = asyncHandler(async (req, res) => {
   const totalAmount  = itemsTotal + shippingCost;
 
   const { data: order, error } = await supabase.from('orders').insert({
-    user_id:          userId,
-    guest_email:      !userId ? guestEmail : null,
-    items_total:      itemsTotal,
-    shipping_cost:    shippingCost,
-    total_amount:     totalAmount,
-    payment_method:   paymentMethod,
-    shipping_address: shippingAddress,
-    notes,
-    is_deleted:       false,
+    user_id: userId, guest_email: !userId ? guestEmail : null,
+    items_total: itemsTotal, shipping_cost: shippingCost, total_amount: totalAmount,
+    payment_method: paymentMethod, shipping_address: shippingAddress,
+    notes, is_deleted: false, source: 'website', is_manual: false,
   }).select().single();
 
   if (error) return res.status(400).json({ message: error.message });
@@ -62,10 +56,22 @@ export const createOrder = asyncHandler(async (req, res) => {
     amount: totalAmount, currency: 'PKR', status: 'pending',
   });
 
+  // Send confirmation email (guests with email + logged in users)
+  const emailTo = guestEmail || req.user?.email;
+  const customerName = shippingAddress?.full_name || req.user?.name || 'Customer';
+  if (emailTo && !order.is_manual) {
+    sendOrderConfirmationEmail({
+      to: emailTo, customerName,
+      orderId: order.id, items: verifiedItems,
+      itemsTotal, shippingCost, totalAmount, paymentMethod,
+      shippingAddress,
+    }).catch(err => console.error('[Mail] Failed to send order email:', err));
+  }
+
   res.status(201).json(order);
 });
 
-// ── My orders (logged in) ──────────────────────────────────────────
+// ── My orders ─────────────────────────────────────────────────────
 export const getMyOrders = asyncHandler(async (req, res) => {
   const { data, error } = await supabase.from('orders')
     .select('*, order_items(*)')
@@ -87,8 +93,6 @@ export const getOrderById = asyncHandler(async (req, res) => {
 });
 
 export const markAsPaid = asyncHandler(async (req, res) => {
-  const { data: order } = await supabase.from('orders').select('*').eq('id', req.params.id).single();
-  if (!order) return res.status(404).json({ message: 'Order not found' });
   await supabase.from('orders').update({ is_paid: true, paid_at: new Date().toISOString() }).eq('id', req.params.id);
   await supabase.from('payments').update({ status: 'completed', paid_at: new Date().toISOString() }).eq('order_id', req.params.id);
   res.json({ message: 'Marked as paid' });
@@ -109,56 +113,36 @@ export const getAllOrders = asyncHandler(async (req, res) => {
   res.json({ orders: data || [], total: count || 0, pages: Math.ceil((count||0) / Number(limit)) });
 });
 
-// ── Update order status with confirmation flow ─────────────────────
-// Status flow: Pending → Processing → Shipped → Delivered → Confirm Delivered
-//              Pending → Cancelled → Confirm Cancelled
+// ── Update order status ────────────────────────────────────────────
 export const updateOrderStatus = asyncHandler(async (req, res) => {
   const { status, tracking_number } = req.body;
-  const { data: order, error: orderErr } = await supabase.from('orders')
+  const { data: order } = await supabase.from('orders')
     .select('*, order_items(*)').eq('id', req.params.id).single();
-  if (orderErr || !order) return res.status(404).json({ message: 'Order not found' });
+  if (!order) return res.status(404).json({ message: 'Order not found' });
 
   const updates = { status };
   if (tracking_number) updates.tracking_number = tracking_number;
 
-  // ── Confirm Delivered: finalise revenue ──────────────────────────
   if (status === 'Confirm Delivered') {
-    updates.status        = 'Delivered';
-    updates.delivered_at  = new Date().toISOString();
-    updates.is_confirmed  = true;
-
-    // Add to revenue now that delivery is confirmed
+    updates.status       = 'Delivered';
+    updates.delivered_at = new Date().toISOString();
+    updates.is_confirmed = true;
     await supabase.from('ledger_entries').insert([
       { order_id: order.id, type: 'sale', debit_account: 'accounts_receivable', credit_account: 'revenue', amount: order.items_total, currency: 'PKR', description: `Confirmed delivery — Order #${order.id.slice(-8).toUpperCase()}` },
       ...(order.shipping_cost > 0 ? [{ order_id: order.id, type: 'shipping', debit_account: 'accounts_receivable', credit_account: 'shipping_income', amount: order.shipping_cost, currency: 'PKR', description: `Shipping — Order #${order.id.slice(-8).toUpperCase()}` }] : []),
     ]);
-
-    const totalCogs = (order.order_items || []).reduce((acc, i) => acc + (i.cost_price || 0) * i.qty, 0);
-    if (totalCogs > 0) {
-      await supabase.from('ledger_entries').insert({ order_id: order.id, type: 'cogs', debit_account: 'cogs', credit_account: 'inventory_asset', amount: totalCogs, currency: 'PKR', description: `COGS — Order #${order.id.slice(-8).toUpperCase()}` });
-    }
+    const totalCogs = (order.order_items||[]).reduce((acc, i) => acc + (i.cost_price||0)*i.qty, 0);
+    if (totalCogs > 0) await supabase.from('ledger_entries').insert({ order_id: order.id, type: 'cogs', debit_account: 'cogs', credit_account: 'inventory_asset', amount: totalCogs, currency: 'PKR', description: `COGS — Order #${order.id.slice(-8).toUpperCase()}` });
   }
 
-  // ── Confirm Cancelled: restore stock, no revenue impact ──────────
   if (status === 'Confirm Cancelled') {
     updates.status       = 'Cancelled';
     updates.is_confirmed = true;
-
-    for (const item of (order.order_items || [])) {
-      await supabase.from('inventory_transactions').insert({
-        product_id: item.product_id, type: 'return',
-        qty_change: item.qty, notes: `Cancelled — Order #${order.id.slice(-8).toUpperCase()}`,
-      });
+    for (const item of (order.order_items||[])) {
+      await supabase.from('inventory_transactions').insert({ product_id: item.product_id, type: 'return', qty_change: item.qty, notes: `Cancelled — Order #${order.id.slice(-8).toUpperCase()}` });
     }
-
-    // If was previously confirmed delivered, deduct shipping (store paid for delivery)
     if (order.status === 'Delivered' && order.is_confirmed && order.shipping_cost > 0) {
-      await supabase.from('ledger_entries').insert({
-        order_id: order.id, type: 'expense',
-        debit_account: 'delivery_loss', credit_account: 'cash',
-        amount: order.shipping_cost, currency: 'PKR',
-        description: `Delivery loss — cancelled after delivery #${order.id.slice(-8).toUpperCase()}`,
-      });
+      await supabase.from('ledger_entries').insert({ order_id: order.id, type: 'expense', debit_account: 'delivery_loss', credit_account: 'cash', amount: order.shipping_cost, currency: 'PKR', description: `Delivery loss — cancelled after delivery #${order.id.slice(-8).toUpperCase()}` });
     }
   }
 
@@ -167,19 +151,18 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
   res.json(data);
 });
 
-// ── Delete order (soft) ────────────────────────────────────────────
+// ── Delete order ───────────────────────────────────────────────────
 export const deleteOrder = asyncHandler(async (req, res) => {
   const { data: order } = await supabase.from('orders').select('status, is_confirmed').eq('id', req.params.id).single();
   if (!order) return res.status(404).json({ message: 'Order not found' });
-  // Only allow delete if confirmed (cancelled or delivered)
   if (!order.is_confirmed && !['Cancelled','Delivered'].includes(order.status)) {
-    return res.status(400).json({ message: 'Can only delete confirmed orders. Confirm cancellation or delivery first.' });
+    return res.status(400).json({ message: 'Confirm the order first before deleting' });
   }
   await supabase.from('orders').update({ is_deleted: true }).eq('id', req.params.id);
   res.json({ message: 'Order deleted' });
 });
 
-// ── Manual order (WhatsApp / Instagram) ──────────────────────────
+// ── Manual order (WhatsApp/Instagram) — customer name NOT admin ───
 export const createManualOrder = asyncHandler(async (req, res) => {
   const { customer_name, customer_phone, customer_address, items, paymentMethod = 'cod', notes = '', source = 'whatsapp' } = req.body;
   if (!items?.length || !customer_name || !customer_phone) {
@@ -192,8 +175,7 @@ export const createManualOrder = asyncHandler(async (req, res) => {
 
   for (const item of items) {
     const { data: product } = await supabase.from('products')
-      .select('id, name, image, price, cost_price, inventory(stock_qty)')
-      .eq('id', item.product_id).single();
+      .select('id, name, image, price, cost_price').eq('id', item.product_id).single();
     if (!product) return res.status(404).json({ message: `Product not found` });
     verifiedItems.push({ product_id: product.id, name: product.name, image: product.image, price: item.price || product.price, cost_price: product.cost_price || 0, qty: item.qty });
     itemsTotal += (item.price || product.price) * item.qty;
@@ -202,20 +184,23 @@ export const createManualOrder = asyncHandler(async (req, res) => {
   const shippingCost = itemsTotal >= settings.free_delivery_threshold ? 0 : settings.delivery_charge;
   const totalAmount  = itemsTotal + shippingCost;
 
+  // Store customer name in shipping_address — NOT linked to admin user
   const shippingAddress = {
-    full_name: customer_name,
+    full_name: customer_name,   // <-- customer name, not admin
     phone:     customer_phone,
-    street:    customer_address?.street    || '',
-    city:      customer_address?.city      || '',
-    province:  customer_address?.province  || '',
+    street:    customer_address?.street   || '',
+    city:      customer_address?.city     || '',
+    province:  customer_address?.province || '',
   };
 
   const { data: order, error } = await supabase.from('orders').insert({
-    user_id: req.user.id, // admin creates it
-    guest_email: null,
-    items_total: itemsTotal, shipping_cost: shippingCost, total_amount: totalAmount,
-    payment_method: paymentMethod, shipping_address: shippingAddress,
-    notes: `[${source.toUpperCase()} ORDER] ${notes}`, source, is_manual: true, is_deleted: false,
+    user_id:          null,  // <-- no user_id for manual orders
+    guest_email:      null,
+    customer_name:    customer_name, // store separately
+    items_total:      itemsTotal, shipping_cost: shippingCost, total_amount: totalAmount,
+    payment_method:   paymentMethod, shipping_address: shippingAddress,
+    notes:            notes ? `[${source.toUpperCase()}] ${notes}` : `[${source.toUpperCase()} ORDER]`,
+    source, is_manual: true, is_deleted: false,
   }).select().single();
 
   if (error) return res.status(400).json({ message: error.message });
@@ -229,5 +214,6 @@ export const createManualOrder = asyncHandler(async (req, res) => {
     });
   }
 
+  // No email for manual orders
   res.status(201).json(order);
 });

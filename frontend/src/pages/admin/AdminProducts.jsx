@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaPlus, FaEdit, FaTrash, FaSearch, FaTimes, FaToggleOn, FaToggleOff } from "react-icons/fa";
 import { productsAPI } from "../../services/api";
+import api from "../../services/api";
 
 const EMPTY = { name:"", description:"", price:"", cost_price:"", category:"Men", badge:"", stock_qty:"", reorder_point:"5", is_featured:false, warranty_months:"", return_days:"" };
-const CATS  = ["Men","Women","Unisex"];
+// Categories fetched from DB
 const BADGES= ["","Bestseller","New","Top Rated","Limited","Sale"];
 
 const AdminProducts = () => {
@@ -19,6 +20,7 @@ const AdminProducts = () => {
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState("");
   const [deleteId,  setDeleteId]  = useState(null);
+  const [cats,       setCats]       = useState(["Men","Women","Unisex"]);
 
   const fetchProducts = () => {
     setLoading(true);
@@ -32,6 +34,10 @@ const AdminProducts = () => {
   };
 
   useEffect(() => { fetchProducts(); }, [search]);
+
+  useEffect(() => {
+    api.get("/categories").then(({ data }) => { if (data?.length) setCats(data.map(c => c.name)); }).catch(console.error);
+  }, []);
 
   const openCreate = () => { setEditing(null); setForm(EMPTY); setFiles([]); setError(""); setModal(true); };
   const openEdit   = (p) => {
@@ -187,7 +193,7 @@ const AdminProducts = () => {
                     <label className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5 block">Category</label>
                     <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
                       className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none focus:border-black bg-white">
-                      {CATS.map(c => <option key={c}>{c}</option>)}
+                      {cats.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
