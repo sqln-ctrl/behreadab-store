@@ -14,10 +14,23 @@ const createTransporter = () => {
     return null;
   }
 
-  return {
-    transporter: nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } }),
-    from: `"${fromName}" <${fromEmail}>`,
-  };
+return {
+  transporter: nodemailer.createTransport({
+    host,
+    port,
+    secure: true,
+    auth: {
+      user,
+      pass
+    },
+    tls: {
+      rejectUnauthorized: false
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000
+  }),
+  from: `"${fromName}" <${fromEmail}>`,
 };
 
 // ── Order confirmation email ───────────────────────────────────────
