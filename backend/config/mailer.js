@@ -1,34 +1,44 @@
-import nodemailer from 'nodemailer';
+// Uses Brevo HTTP API — no SMTP ports needed, works on Railway
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
-const createTransporter = () => {
-  const host      = process.env.MAIL_HOST;
-  const port      = Number(process.env.MAIL_PORT) || 587;
-  const user      = process.env.MAIL_USER;
-  const pass      = process.env.MAIL_PASS;
-  const fromName  = process.env.MAIL_FROM_NAME  || 'Andaaz Watches';
-  const fromEmail = process.env.MAIL_FROM_EMAIL || user;
-
-  if (!host || !user || !pass) {
-    console.warn('[Mail] MAIL_HOST, MAIL_USER or MAIL_PASS not set — emails disabled');
-    return null;
-  }
-
-  return {
-    transporter: nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-    }),
-    from: `"${fromName}" <${fromEmail}>`,
-  };
+const getConfig = () => {
+  const apiKey   = process.env.BREVO_API_KEY;
+  const fromName = process.env.MAIL_FROM_NAME  || 'Andaaz Watches';
+  const fromEmail= process.env.MAIL_FROM_EMAIL || 'andaazbyba@gmail.com';
+  if (!apiKey) { console.warn('[Mail] BREVO_API_KEY not set — emails disabled'); return null; }
+  return { apiKey, fromName, fromEmail };
 };
 
-export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, items, itemsTotal, shippingCost, totalAmount, paymentMethod, shippingAddress }) => {
-  const mail = createTransporter();
-  if (!mail) return;
+const sendEmail = async ({ to, subject, html }) => {
+  const config = getConfig();
+  if (!config) return;
 
-  const orderRef = orderId.slice(-8).toUpperCase();
+  const response = await fetch(BREVO_API_URL, {
+    method: 'POST',
+    headers: {
+      'accept':       'application/json',
+      'api-key':      config.apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender:   { name: config.fromName, email: config.fromEmail },
+      to:       [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.message || 'Brevo API error');
+  }
+
+  console.log(`[Mail] Email sent to ${to} via Brevo API`);
+};
+
+// ── Order confirmation ─────────────────────────────────────────────
+export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, items, itemsTotal, shippingCost, totalAmount, paymentMethod, shippingAddress }) => {
+  const orderRef  = orderId.slice(-8).toUpperCase();
 
   const itemsHtml = items.map(item => `
     <tr>
@@ -43,7 +53,7 @@ export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, it
     </tr>`).join('');
 
   const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <div style="max-width:600px;margin:0 auto;background:white;">
   <div style="background:#000;padding:32px;text-align:center;">
@@ -98,14 +108,11 @@ export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, it
 </div>
 </body></html>`;
 
-  await mail.transporter.sendMail({ from: mail.from, to, subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
-  console.log(`[Mail] Order confirmation sent to ${to}`);
+  await sendEmail({ to, subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
 };
 
+// ── OTP email ──────────────────────────────────────────────────────
 export const sendOTPEmail = async ({ to, name, otp }) => {
-  const mail = createTransporter();
-  if (!mail) return;
-
   const html = `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <div style="max-width:500px;margin:0 auto;background:white;">
@@ -123,6 +130,5 @@ export const sendOTPEmail = async ({ to, name, otp }) => {
 </div>
 </body></html>`;
 
-  await mail.transporter.sendMail({ from: mail.from, to, subject: `${otp} — Your Andaaz verification code`, html });
-  console.log(`[Mail] OTP sent to ${to}`);
+  await sendEmail({ to, subject: `${otp} — Your Andaaz verification code`, html });
 };
