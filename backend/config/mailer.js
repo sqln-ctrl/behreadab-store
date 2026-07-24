@@ -1,45 +1,18 @@
-// Uses Brevo HTTP API — no SMTP ports needed, works on Railway
-const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
+import { Resend } from 'resend';
 
-const getConfig = () => {
-  const apiKey   = process.env.BREVO_API_KEY;
-  const fromName = process.env.MAIL_FROM_NAME  || 'Andaaz Watches';
-  const fromEmail= process.env.MAIL_FROM_EMAIL || 'andaazbyba@gmail.com';
-  if (!apiKey) { console.warn('[Mail] BREVO_API_KEY not set — emails disabled'); return null; }
-  return { apiKey, fromName, fromEmail };
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) { console.warn('[Mail] RESEND_API_KEY not set — emails disabled'); return null; }
+  return new Resend(apiKey);
 };
 
-const sendEmail = async ({ to, subject, html }) => {
-  const config = getConfig();
-  if (!config) return;
+const FROM = `${process.env.MAIL_FROM_NAME || 'Andaaz Watches'} <${process.env.MAIL_FROM_EMAIL || 'onboarding@resend.dev'}>`;
 
-  const response = await fetch(BREVO_API_URL, {
-    method: 'POST',
-    headers: {
-      'accept':       'application/json',
-      'api-key':      config.apiKey,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender:   { name: config.fromName, email: config.fromEmail },
-      to:       [{ email: to }],
-      subject,
-      htmlContent: html,
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.message || 'Brevo API error');
-  }
-
-  console.log(`[Mail] Email sent to ${to} via Brevo API`);
-};
-
-// ── Order confirmation ─────────────────────────────────────────────
 export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, items, itemsTotal, shippingCost, totalAmount, paymentMethod, shippingAddress }) => {
-  const orderRef  = orderId.slice(-8).toUpperCase();
+  const resend = getResend();
+  if (!resend) return;
 
+  const orderRef  = orderId.slice(-8).toUpperCase();
   const itemsHtml = items.map(item => `
     <tr>
       <td style="padding:10px;border-bottom:1px solid #f3f4f6;">
@@ -108,11 +81,15 @@ export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, it
 </div>
 </body></html>`;
 
-  await sendEmail({ to, subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
+  const { error } = await resend.emails.send({ from: FROM, to, subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
+  if (error) throw new Error(error.message);
+  console.log(`[Mail] Order confirmation sent to ${to}`);
 };
 
-// ── OTP email ──────────────────────────────────────────────────────
 export const sendOTPEmail = async ({ to, name, otp }) => {
+  const resend = getResend();
+  if (!resend) return;
+
   const html = `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <div style="max-width:500px;margin:0 auto;background:white;">
@@ -130,5 +107,7 @@ export const sendOTPEmail = async ({ to, name, otp }) => {
 </div>
 </body></html>`;
 
-  await sendEmail({ to, subject: `${otp} — Your Andaaz verification code`, html });
+  const { error } = await resend.emails.send({ from: FROM, to, subject: `${otp} — Your Andaaz verification code`, html });
+  if (error) throw new Error(error.message);
+  console.log(`[Mail] OTP sent to ${to}`);
 };
