@@ -1,18 +1,21 @@
 import { Resend } from 'resend';
 
+// Emails are completely optional — if RESEND_API_KEY is not set, everything is skipped silently
 const getResend = () => {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) { console.warn('[Mail] RESEND_API_KEY not set — emails disabled'); return null; }
+  if (!apiKey) return null;
   return new Resend(apiKey);
 };
 
 const FROM = `${process.env.MAIL_FROM_NAME || 'Andaaz Watches'} <${process.env.MAIL_FROM_EMAIL || 'onboarding@resend.dev'}>`;
 
-export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, items, itemsTotal, shippingCost, totalAmount, paymentMethod, shippingAddress }) => {
+export const sendOrderConfirmationEmail = async (data) => {
   const resend = getResend();
-  if (!resend) return;
+  if (!resend) return; // silently skip if not configured
 
-  const orderRef  = orderId.slice(-8).toUpperCase();
+  const { to, customerName, orderId, items, itemsTotal, shippingCost, totalAmount, paymentMethod, shippingAddress } = data;
+  const orderRef = orderId.slice(-8).toUpperCase();
+
   const itemsHtml = items.map(item => `
     <tr>
       <td style="padding:10px;border-bottom:1px solid #f3f4f6;">
@@ -81,14 +84,18 @@ export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, it
 </div>
 </body></html>`;
 
-  const { error } = await resend.emails.send({ from: FROM, to: [to], subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
-  if (error) throw new Error(error.message);
-  console.log(`[Mail] Order confirmation sent to ${to}`);
+  try {
+    const { error } = await resend.emails.send({ from: FROM, to: [to], subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
+    if (error) console.error('[Mail] Order email error:', error.message);
+    else console.log(`[Mail] Order confirmation sent to ${to}`);
+  } catch (e) {
+    console.error('[Mail] Order email failed:', e.message);
+  }
 };
 
 export const sendOTPEmail = async ({ to, name, otp }) => {
   const resend = getResend();
-  if (!resend) return;
+  if (!resend) return; // silently skip if not configured
 
   const html = `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
@@ -107,7 +114,11 @@ export const sendOTPEmail = async ({ to, name, otp }) => {
 </div>
 </body></html>`;
 
-  const { error } = await resend.emails.send({ from: FROM, to: [to], subject: `${otp} — Your Andaaz verification code`, html });
-  if (error) throw new Error(error.message);
-  console.log(`[Mail] OTP sent to ${to}`);
+  try {
+    const { error } = await resend.emails.send({ from: FROM, to: [to], subject: `${otp} — Your Andaaz verification code`, html });
+    if (error) console.error('[Mail] OTP email error:', error.message);
+    else console.log(`[Mail] OTP sent to ${to}`);
+  } catch (e) {
+    console.error('[Mail] OTP email failed:', e.message);
+  }
 };
