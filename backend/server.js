@@ -61,7 +61,7 @@ app.get('/api/health', (req, res) => res.json({
   status: 'OK', time: new Date().toISOString(),
   supabase:   !!process.env.SUPABASE_URL,
   cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
-  mail:       !!process.env.MAIL_USER,
+  mail: !!process.env.RESEND_API_KEY,
 }));
 
 app.use(errorHandler);
@@ -71,5 +71,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀  http://localhost:${PORT}`);
   console.log(`📦  Supabase: ${!!process.env.SUPABASE_URL}`);
-  console.log(`📧  Mail:     ${!!process.env.MAIL_USER} (${process.env.MAIL_USER || 'not configured'})`);
+  console.log(`📧  Mail:     ${!!process.env.RESEND_API_KEY} (resend)`);
 });
