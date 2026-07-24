@@ -81,7 +81,7 @@ export const sendOrderConfirmationEmail = async ({ to, customerName, orderId, it
 </div>
 </body></html>`;
 
-  const { error } = await resend.emails.send({ from: FROM, to: [to],, subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
+  const { error } = await resend.emails.send({ from: FROM, to: [to], subject: `Order Confirmed — #${orderRef} | Andaaz`, html });
   if (error) throw new Error(error.message);
   console.log(`[Mail] Order confirmation sent to ${to}`);
 };
@@ -107,7 +107,7 @@ export const sendOTPEmail = async ({ to, name, otp }) => {
 </div>
 </body></html>`;
 
-  const { error } = await resend.emails.send({ from: FROM, to: [to],, subject: `${otp} — Your Andaaz verification code`, html });
+  const { error } = await resend.emails.send({ from: FROM, to: [to], subject: `${otp} — Your Andaaz verification code`, html });
   if (error) throw new Error(error.message);
   console.log(`[Mail] OTP sent to ${to}`);
 };
